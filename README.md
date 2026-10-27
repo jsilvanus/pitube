@@ -12,6 +12,8 @@ Node >= 20, ESM. Contract: `openapi/openapi.json` (built by `node scripts/build-
 4. **Caption gateway.** pivoice posts `POST /api/v1/captions {captions:[{text,timestamp?}]}`; pitube sends them with the `lcyt` sender (sequence numbers and timestamps). While the broadcast exists but is not live they are held (up to 50, 30 s) and flushed when it goes live (202); with no broadcast: 409.
 5. **Token health.** `GET /api/v1/auth/health`, `POST /api/v1/auth/check` (also run daily) report `ok|revoked|refresh_failed`, sign-in age and a warning at 5 days (Google apps in testing mode lose refresh tokens after 7 days). Sign-in is the OAuth device flow: `auth-device-start` shows a URL and code, then `auth-device-poll`.
 
+6. **Status to pigateway.** With `PITUBE_GATEWAY_URL` (and `PITUBE_GATEWAY_API_KEY`) set, every poll is pushed to `PUT /api/v1/youtube/status` as `live` (live or unhealthy), `offline` (idle, upcoming, testing, ended) or `unknown` (monitor error, not polled), with a ttl of three poll intervals so the gateway shows `unknown` if pitube stops. pilight reads it from the gateway.
+
 ## Run
 
 ```sh

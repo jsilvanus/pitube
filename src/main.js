@@ -1,5 +1,6 @@
 import { loadConfig } from './config.js';
 import { buildApp } from './app.js';
+import { createGatewayReporter } from './gateway-reporter.js';
 
 const config = loadConfig();
 if (config.mode !== 'development' && !config.apiToken) {

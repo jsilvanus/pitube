@@ -52,6 +52,7 @@ export function createMonitor({ config, youtube, events, now = () => Date.now() 
       state = { ...before, error, updatedAt: new Date(now()).toISOString() };
       if (before.error?.code !== error.code) events.publish('monitor.error', error);
     }
+    events.publish('poll', { level: state.level });
     return state;
   }
 

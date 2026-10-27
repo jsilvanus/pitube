@@ -31,6 +31,9 @@ export function loadConfig(env = process.env) {
     /** Captions while the broadcast is not live: hold up to this many for this long, else drop. */
     captionHoldMax: int('PITUBE_CAPTION_HOLD_MAX', 50),
     captionHoldMs: int('PITUBE_CAPTION_HOLD_MS', 30_000),
+    /** pigateway: pitube reports the YouTube live status there. Empty URL = off. */
+    gatewayUrl: env.PITUBE_GATEWAY_URL || '',
+    gatewayApiKey: env.PITUBE_GATEWAY_API_KEY || '',
     confirmTtlMs: int('PITUBE_CONFIRM_TTL_MS', 30_000),
   };
 }
