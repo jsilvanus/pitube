@@ -1,0 +1,17 @@
+{
+  "name": "pitube",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Pi's only YouTube connection: broadcast monitor, guarded start/stop, config and caption gateway",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "pitube": "./bin/pitube.js" },
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "lcyt": "^3.0.0"
+  }
+}
