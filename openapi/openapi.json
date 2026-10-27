@@ -1,0 +1,603 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "pitube",
+    "version": "0.1.0",
+    "description": "The Pi's only YouTube connection. Never touches video."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:3200"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "Broadcast": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "lifeCycleStatus": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Liveness",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "operationId": "ready",
+        "summary": "Ready when YouTube is signed in",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "status",
+        "summary": "Current broadcast, stream health and viewers (level: idle|upcoming|testing|live|unhealthy|ended)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/status/refresh": {
+      "post": {
+        "operationId": "status-refresh",
+        "summary": "Poll YouTube now",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "operationId": "events",
+        "summary": "Server-Sent Events: status, broadcast.status, stream.health, stream.status, auth.health, monitor.error, broadcast.transition",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/health": {
+      "get": {
+        "operationId": "auth-health",
+        "summary": "Sign-in and refresh-token health (no secrets)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/check": {
+      "post": {
+        "operationId": "auth-check",
+        "summary": "Refresh the token now and report health",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/device/start": {
+      "post": {
+        "operationId": "auth-device-start",
+        "summary": "Start the device sign-in; returns a URL and a code",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/device/poll": {
+      "post": {
+        "operationId": "auth-device-poll",
+        "summary": "Poll the device sign-in (pending|signed_in|denied|expired)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcasts": {
+      "get": {
+        "operationId": "broadcasts-list",
+        "summary": "List broadcasts",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "active",
+                "upcoming",
+                "completed",
+                "all"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      },
+      "post": {
+        "operationId": "broadcasts-create",
+        "summary": "Create a broadcast, optionally bound to a stream",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "scheduledStart"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "scheduledStart": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "privacy": {
+                    "enum": [
+                      "public",
+                      "unlisted",
+                      "private"
+                    ]
+                  },
+                  "streamId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcasts/{id}": {
+      "patch": {
+        "operationId": "broadcasts-update",
+        "summary": "Change title, description, start or privacy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "scheduledStart": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "privacy": {
+                    "enum": [
+                      "public",
+                      "unlisted",
+                      "private"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcasts/{id}/bind": {
+      "post": {
+        "operationId": "broadcasts-bind",
+        "summary": "Bind a broadcast to a stream",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "streamId"
+                ],
+                "properties": {
+                  "streamId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcasts/{id}/testing": {
+      "post": {
+        "operationId": "broadcasts-testing",
+        "summary": "Move ready to testing (needs an active stream)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcasts/{id}/go-live": {
+      "post": {
+        "operationId": "broadcasts-go-live",
+        "summary": "Go live. Refused unless the stream is active and not unhealthy (force overrides health only)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "force": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcasts/{id}/end/request": {
+      "post": {
+        "operationId": "broadcasts-end-request",
+        "summary": "Ending step 1: returns a short-lived confirmToken, changes nothing",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/broadcasts/{id}/end/confirm": {
+      "post": {
+        "operationId": "broadcasts-end-confirm",
+        "summary": "Ending step 2: complete the broadcast with the confirmToken",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "confirmToken"
+                ],
+                "properties": {
+                  "confirmToken": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/streams": {
+      "get": {
+        "operationId": "streams-list",
+        "summary": "List your streams (no stream keys)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      },
+      "post": {
+        "operationId": "streams-create",
+        "summary": "Create a reusable stream (fixed stream key)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/streams/{id}/ingest": {
+      "get": {
+        "operationId": "streams-ingest",
+        "summary": "Ingest address and stream key, for configuring the encoder (secret)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/captions": {
+      "post": {
+        "operationId": "captions-send",
+        "summary": "Send captions; held (202) while the broadcast exists but is not live, 409 when there is none",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "captions"
+                ],
+                "properties": {
+                  "captions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "text"
+                      ],
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "timestamp": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    },
+    "/api/v1/captions/status": {
+      "get": {
+        "operationId": "captions-status",
+        "summary": "Caption gateway counters",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error:{code,message}}"
+          }
+        }
+      }
+    }
+  }
+}
