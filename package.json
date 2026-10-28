@@ -1,0 +1,25 @@
+{
+  "name": "pitube",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "YouTube lifecycle handler and live caption sender for the pi* stack",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "tsx --test tests/**/*.test.ts"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "lcyt": "file:../live-captions-yt/packages/lcyt"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.3"
+  }
+}
