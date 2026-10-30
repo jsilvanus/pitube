@@ -79,7 +79,13 @@ export function buildApp(config: PitubeConfig): PitubeApp {
       const detail = current
         ? `Broadcast: ${current.title} (${state}, health: ${coordinator.getStreamHealth()})`
         : `Idle (${state})`;
-      return { state: mappedState, detail };
+      return {
+        state: mappedState,
+        detail,
+        broadcastId: current?.id ?? null,
+        title: current?.title ?? null,
+        lifecycleState: state,
+      };
     },
   });
 

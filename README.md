@@ -68,3 +68,13 @@ Set via environment variables or a `.env` file (see `.env.example`):
 
 See [CONTRACT.md](CONTRACT.md) for the contract between `pitube` and `pigateway`.
 See [TODO.md](TODO.md) for the task roadmap.
+
+---
+
+## Pi Ecosystem Integration & Status Updates
+
+This project is an integral component of the [Pi Production Ecosystem](file:///d:/piecosystem).
+
+> [!IMPORTANT]
+> Any changes to this repository's architectural role, API routes, communication protocols, exposed ports, dependencies, or runtime status **must be documented in the central `piecosystem` coordination repository** (`docs/projects-catalog.md` and `docs/inter-service-matrix.md`).
+> Always verify cross-system health with `npm run status` in `D:\piecosystem`.

@@ -43,6 +43,9 @@ export interface GatewayTranscriptEvent {
 export interface GatewayYoutubeStatusPayload {
   state: "live" | "offline" | "unknown";
   detail?: string;
+  broadcastId?: string | null;
+  title?: string | null;
+  lifecycleState?: BroadcastState;
   checkedAt: number;
   ttlMs: number;
 }

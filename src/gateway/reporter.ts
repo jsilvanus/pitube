@@ -9,7 +9,13 @@ export interface GatewayStatusReporterOptions {
   gatewayToken?: string | null;
   intervalMs?: number;
   ttlMs?: number;
-  getStatus: () => { state: "live" | "offline" | "unknown"; detail?: string };
+  getStatus: () => {
+    state: "live" | "offline" | "unknown";
+    detail?: string;
+    broadcastId?: string | null;
+    title?: string | null;
+    lifecycleState?: GatewayYoutubeStatusPayload["lifecycleState"];
+  };
   fetchFn?: typeof fetch;
 }
 
@@ -18,7 +24,7 @@ export class GatewayStatusReporter {
   private readonly gatewayToken?: string | null;
   private readonly intervalMs: number;
   private readonly ttlMs: number;
-  private readonly getStatus: () => { state: "live" | "offline" | "unknown"; detail?: string };
+  private readonly getStatus: GatewayStatusReporterOptions["getStatus"];
   private readonly fetchFn: typeof fetch;
 
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -56,6 +62,9 @@ export class GatewayStatusReporter {
     const payload: GatewayYoutubeStatusPayload = {
       state: current.state,
       detail: current.detail,
+      ...(current.broadcastId !== undefined ? { broadcastId: current.broadcastId } : {}),
+      ...(current.title !== undefined ? { title: current.title } : {}),
+      ...(current.lifecycleState !== undefined ? { lifecycleState: current.lifecycleState } : {}),
       checkedAt: Date.now(),
       ttlMs: this.ttlMs,
     };
