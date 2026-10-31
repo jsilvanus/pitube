@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "fastify": "^5.2.0",
-    "lcyt": "file:../live-captions-yt/packages/lcyt"
+    "lcyt": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

@@ -75,8 +75,8 @@ Query parameter `?types=transcript,pivoice-activity` limits the stream to the na
    `youtubeDelayMs` is pitube configuration. pitube must not shift the audio clock in any other way.
 2. **Drop stale captions.** If a transcript's `endedAt` is older than a configured maximum age (default
    60 s) when pitube is ready to send it, drop it and count it. Never replay old captions as if live.
-3. **Batching and sending.** Use the `lcyt` core from `jsilvanus/live-captions-yt` (package `lcyt`,
-   `packages/lcyt`). It provides batching, sequence handling and the sync offset. Do not reimplement
+3. **Batching and sending.** Use the `lcyt` core (npm package `lcyt`).
+   It provides batching, sequence handling and the sync offset. Do not reimplement
    them. The YouTube caption ingestion URL contains the stream key.
 4. **Secrets.** The stream key and ingestion URL never leave pitube: not in logs, not in status output,
    not back to the gateway. Redact them in error messages.
