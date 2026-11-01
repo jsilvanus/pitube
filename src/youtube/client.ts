@@ -57,7 +57,17 @@ export class YouTubeClient {
    * List upcoming broadcasts on the channel.
    */
   async listUpcomingBroadcasts(maxResults: number = 10): Promise<BroadcastSummary[]> {
-    const path = `/liveBroadcasts?part=snippet,status,contentDetails&broadcastStatus=upcoming&broadcastType=all&maxResults=${maxResults}`;
+    return this.listBroadcasts("upcoming", maxResults);
+  }
+
+  /**
+   * List broadcasts by YouTube broadcastStatus: upcoming, active, completed or all.
+   */
+  async listBroadcasts(
+    status: "upcoming" | "active" | "completed" | "all" = "upcoming",
+    maxResults: number = 10
+  ): Promise<BroadcastSummary[]> {
+    const path = `/liveBroadcasts?part=snippet,status,contentDetails&broadcastStatus=${status}&broadcastType=all&maxResults=${maxResults}`;
     const data = await this.request<LiveBroadcastListResponse>(path);
     return (data.items || []).map((item) => this.mapBroadcast(item));
   }
@@ -143,7 +153,7 @@ export class YouTubeClient {
   /**
    * List live streams on the channel to find default or reusable streams.
    */
-  async listStreams(maxResults: number = 5): Promise<LiveStreamResource[]> {
+  async listStreams(maxResults: number = 50): Promise<LiveStreamResource[]> {
     const path = `/liveStreams?part=snippet,cdn,status&mine=true&maxResults=${maxResults}`;
     const data = await this.request<LiveStreamListResponse>(path);
     return data.items || [];
@@ -156,6 +166,70 @@ export class YouTubeClient {
     const path = `/liveStreams?part=snippet,cdn,status&id=${encodeURIComponent(streamId)}`;
     const data = await this.request<LiveStreamListResponse>(path);
     return data.items?.[0] || null;
+  }
+
+  /**
+   * Create a reusable RTMP live stream (1080p, variable bitrate).
+   */
+  async createStream(title: string): Promise<LiveStreamResource> {
+    const body = {
+      snippet: { title },
+      cdn: { ingestionType: "rtmp", resolution: "variable", frameRate: "variable" },
+      contentDetails: { isReusable: true },
+    };
+    return this.request<LiveStreamResource>(`/liveStreams?part=snippet,cdn,status,contentDetails`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * Change a broadcast's privacy (public, unlisted, private). liveBroadcasts.update needs the
+   * title and scheduled start time again, so the current resource is read and sent back.
+   */
+  async setPrivacy(broadcastId: string, privacy: BroadcastPrivacy): Promise<BroadcastSummary> {
+    const current = await this.request<LiveBroadcastListResponse>(
+      `/liveBroadcasts?part=snippet,status,contentDetails&id=${encodeURIComponent(broadcastId)}`
+    );
+    const item = current.items?.[0];
+    if (!item) throw new Error(`Broadcast not found: ${broadcastId}`);
+    const body = {
+      id: broadcastId,
+      snippet: {
+        title: item.snippet.title,
+        description: item.snippet.description,
+        scheduledStartTime: item.snippet.scheduledStartTime,
+      },
+      status: {
+        privacyStatus: privacy,
+        selfDeclaredMadeForKids: false,
+      },
+    };
+    const updated = await this.request<LiveBroadcastResource>(`/liveBroadcasts?part=snippet,status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    // The update response carries no contentDetails; keep the ones read before.
+    updated.contentDetails = item.contentDetails;
+    return this.mapBroadcast(updated);
+  }
+
+  /**
+   * Upload a thumbnail (JPEG, PNG or GIF, max 2 MB) for a broadcast video.
+   */
+  async setThumbnail(videoId: string, image: Uint8Array, contentType: string): Promise<void> {
+    const uploadBase = this.apiBase.replace(/\/youtube\/v3$/, "") + "/upload/youtube/v3";
+    const url = `${uploadBase}/thumbnails/set?videoId=${encodeURIComponent(videoId)}`;
+    const headers = new Headers({ "Content-Type": contentType, Accept: "application/json" });
+    if (this.auth) headers.set("Authorization", `Bearer ${await this.auth.getAccessToken()}`);
+    const response = await this.fetchFn(url, { method: "POST", headers, body: image as unknown as RequestInit["body"] });
+    if (response.status === 401 && this.auth) this.auth.invalidate();
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`YouTube thumbnail upload failed [${response.status}]: ${text.slice(0, 300)}`);
+    }
   }
 
   /**
@@ -192,7 +266,9 @@ export class YouTubeClient {
       privacy: item.status.privacyStatus,
       status,
       embedUrl: `https://www.youtube.com/embed/${item.id}`,
+      watchUrl: `https://www.youtube.com/watch?v=${item.id}`,
       streamId: item.contentDetails?.boundStreamId,
+      monitorStream: item.contentDetails?.monitorStream?.enableMonitorStream ?? false,
     };
   }
 }

@@ -25,4 +25,9 @@ describe("LiveCaptionSender", () => {
     assert.equal(sent, false);
     assert.equal(sender.getStats().dropped, 1);
   });
+
+  it("starts at the restored sequence and reports it", () => {
+    const sender = new LiveCaptionSender({ streamKey: "secret-key-999888", sequence: 42 });
+    assert.equal(sender.getSequence(), 42);
+  });
 });

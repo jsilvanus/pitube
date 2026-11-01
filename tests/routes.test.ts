@@ -96,4 +96,75 @@ describe("HTTP Routes", () => {
     assert.equal(body.broadcast.id, "active_bc");
     assert.equal(body.broadcast.embedUrl, "https://www.youtube.com/embed/active_bc");
   });
+
+  describe("new routes", () => {
+    const headers = { authorization: "Bearer secret-pitube-key" };
+
+    it("validates privacy values", async () => {
+      const app = buildApp(config);
+      const res = await app.server.inject({
+        method: "POST",
+        url: "/api/v1/broadcasts/privacy",
+        headers,
+        payload: { privacy: "everyone" },
+      });
+      assert.equal(res.statusCode, 400);
+    });
+
+    it("rejects thumbnails that are not images", async () => {
+      const app = buildApp(config);
+      const res = await app.server.inject({
+        method: "POST",
+        url: "/api/v1/broadcasts/thumbnail",
+        headers: { ...headers, "content-type": "application/json" },
+        payload: { x: 1 },
+      });
+      assert.equal(res.statusCode, 400);
+    });
+
+    it("accepts a raw image body and fails only because YouTube is not configured", async () => {
+      const app = buildApp(config);
+      const res = await app.server.inject({
+        method: "POST",
+        url: "/api/v1/broadcasts/thumbnail?broadcastId=abc",
+        headers: { ...headers, "content-type": "image/jpeg" },
+        payload: Buffer.from([0xff, 0xd8, 0xff]),
+      });
+      assert.equal(res.statusCode, 400);
+      assert.match(JSON.parse(res.payload).error, /not configured/);
+    });
+
+    it("rejects an unknown broadcast status filter and a bad start target", async () => {
+      const app = buildApp(config);
+      const list = await app.server.inject({ method: "GET", url: "/api/v1/broadcasts?status=foo" });
+      assert.equal(list.statusCode, 400);
+      const start = await app.server.inject({
+        method: "POST",
+        url: "/api/v1/broadcasts/start",
+        headers,
+        payload: { to: "later" },
+      });
+      assert.equal(start.statusCode, 400);
+    });
+
+    it("stop while idle is a 400", async () => {
+      const app = buildApp(config);
+      const res = await app.server.inject({ method: "POST", url: "/api/v1/broadcasts/stop", headers });
+      assert.equal(res.statusCode, 400);
+    });
+
+    it("ingest apply without an encoder configured is a 400", async () => {
+      const app = buildApp(config);
+      const res = await app.server.inject({ method: "POST", url: "/api/v1/ingest/apply", headers, payload: {} });
+      assert.equal(res.statusCode, 400);
+      assert.match(JSON.parse(res.payload).error, /PITUBE_ENCODER_URL/);
+    });
+
+    it("GET /api/v1/streams is empty without YouTube credentials", async () => {
+      const app = buildApp(config);
+      const res = await app.server.inject({ method: "GET", url: "/api/v1/streams" });
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(JSON.parse(res.payload), { items: [] });
+    });
+  });
 });

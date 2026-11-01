@@ -14,6 +14,15 @@ export interface PitubeConfig {
   youtubeClientSecret: string | null;
   youtubeRefreshToken: string | null;
   youtubeStreamKey: string | null;
+  /** liveStream id to bind to broadcasts (PITUBE_STREAM_ID). Without it the stream already bound, else the first on the channel is used. */
+  streamId: string | null;
+  /** File that keeps the caption sequence over a restart (PITUBE_STATE_FILE; empty disables). */
+  stateFile: string | null;
+  /** piencoder base URL for pushing the RTMP target (PITUBE_ENCODER_URL; unset disables). */
+  encoderUrl: string | null;
+  encoderToken: string | null;
+  encoderUnit: number;
+  encoderChannel: 1 | 2;
 
   /** Redirect URI registered in Google Cloud for the one-time OAuth consent (default http://localhost:<port>/oauth/callback). */
   oauthRedirectUri: string;
@@ -50,6 +59,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PitubeConfig {
   const youtubeRefreshToken = env.YOUTUBE_REFRESH_TOKEN?.trim() || null;
   const youtubeStreamKey = env.YOUTUBE_STREAM_KEY?.trim() || null;
 
+  const streamId = env.PITUBE_STREAM_ID?.trim() || null;
+  const stateFile = env.PITUBE_STATE_FILE === undefined ? "./pitube-state.json" : env.PITUBE_STATE_FILE.trim() || null;
+  const encoderUrl = env.PITUBE_ENCODER_URL?.trim() || null;
+  const encoderToken = env.PITUBE_ENCODER_TOKEN?.trim() || null;
+  const encoderUnit = Math.max(1, parseInt(env.PITUBE_ENCODER_UNIT || "1", 10) || 1);
+  const encoderChannel = env.PITUBE_ENCODER_CHANNEL === "2" ? 2 : 1;
+
   const youtubeDelayMs = parseInt(env.PITUBE_DELAY_MS || "30000", 10);
   const staleCaptionMs = parseInt(env.PITUBE_STALE_CAPTION_MS || "90000", 10);
   const captionBaseUrl = env.PITUBE_CAPTION_BASE_URL || "http://upload.youtube.com/closedcaption";
@@ -67,6 +83,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PitubeConfig {
     youtubeClientSecret,
     youtubeRefreshToken,
     youtubeStreamKey,
+    streamId,
+    stateFile,
+    encoderUrl,
+    encoderToken,
+    encoderUnit,
+    encoderChannel,
     oauthRedirectUri: env.PITUBE_OAUTH_REDIRECT_URI?.trim() || `http://localhost:${port}/oauth/callback`,
     envFile: env.PITUBE_ENV_FILE?.trim() || ".env",
     youtubeDelayMs: Number.isFinite(youtubeDelayMs) && youtubeDelayMs >= 0 ? youtubeDelayMs : 30000,

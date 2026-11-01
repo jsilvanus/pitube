@@ -48,6 +48,10 @@ Set via environment variables or a `.env` file (see `.env.example`):
 | `PITUBE_OAUTH_REDIRECT_URI` | Redirect URI registered in Google Cloud for the one-time consent | `http://localhost:<PITUBE_PORT>/oauth/callback` |
 | `PITUBE_ENV_FILE` | Env file that receives `YOUTUBE_REFRESH_TOKEN` after consent | `.env` |
 | `YOUTUBE_STREAM_KEY` | Optional fallback stream key | *(none)* |
+| `PITUBE_STREAM_ID` | liveStream id to bind to every broadcast (list with `GET /api/v1/streams`). Without it: the stream already bound, else the first on the channel, else one is created | *(none)* |
+| `PITUBE_STATE_FILE` | Keeps the caption sequence number and active broadcast id over a restart (never the stream key). Empty disables | `./pitube-state.json` |
+| `PITUBE_ENCODER_URL` | piencoder base URL for `POST /api/v1/ingest/apply` (unset disables) | *(none)* |
+| `PITUBE_ENCODER_TOKEN` / `PITUBE_ENCODER_UNIT` / `PITUBE_ENCODER_CHANNEL` | piencoder bearer token, encoder unit and channel (1 or 2) | *(none)* / `1` / `1` |
 | `PITUBE_DELAY_MS` | Video delay compensation for captions | `30000` (30 s, YouTube guidance) |
 | `PITUBE_STALE_CAPTION_MS`| Max age before dropping stale transcripts | `90000` (90 s) |
 
@@ -57,14 +61,23 @@ Set via environment variables or a `.env` file (see `.env.example`):
 
 - `GET /health` — Simple health check (`{ ok: true, service: "pitube" }`).
 - `GET /api/v1/status` — Current service state, selected broadcast, gateway connection, and caption delivery metrics.
-- `GET /api/v1/broadcasts` — List upcoming broadcasts on the YouTube channel.
-- `POST /api/v1/broadcasts/select` — Select target broadcast (`{ "broadcastId": "<id>" | "auto" }`).
-- `POST /api/v1/broadcasts/create` — Create an ad-hoc broadcast (`{ "title": "...", "privacy": "public"|"unlisted"|"private" }`).
-- `POST /api/v1/broadcasts/start` — Transition broadcast to live and activate caption sender.
-- `POST /api/v1/broadcasts/stop` — Complete broadcast and stop caption sender.
+- `GET /api/v1/broadcasts?status=upcoming|active|completed|all` — List broadcasts on the YouTube channel (default `upcoming`).
+- `POST /api/v1/broadcasts/select` — Select target broadcast (`{ "broadcastId": "<id>" | "auto" }`). `auto` only accepts a broadcast within 60 minutes of now. Stream health is polled from selection on.
+- `POST /api/v1/broadcasts/create` — Create a broadcast (`{ "title": "...", "privacy": "unlisted"(default)|"public"|"private", "autoSelect": true }`).
+- `POST /api/v1/broadcasts/start` — Refuses until the stream receives data. Goes ready → testing (waits for YouTube) → live and starts captions. `{ "to": "testing" }` stops at testing.
+- `POST /api/v1/broadcasts/stop` — Complete the broadcast and stop captions. A failed transition is an error and keeps the selection.
+- `POST /api/v1/broadcasts/privacy` — `{ "privacy": "public"|"unlisted"|"private", "broadcastId"? }` (default: selected broadcast).
+- `GET /api/v1/broadcasts/url?broadcastId=` — `watchUrl`, `embedUrl`, privacy, status.
+- `POST /api/v1/broadcasts/thumbnail?broadcastId=` — Raw image body (`Content-Type: image/jpeg|png|gif`, max 2 MB). Uses `thumbnails.set`; the YouTube channel must be verified.
+- `GET /api/v1/streams` — liveStreams with status and health. Never contains the stream key or ingestion address.
+- `POST /api/v1/streams/create` — `{ "title"? }` creates a reusable RTMP stream.
+- `POST /api/v1/ingest/apply` — Pushes the selected broadcast's RTMP URL and key to piencoder (`PUT /api/v1/encoder/:unit/rtmp/:channel`). The key never leaves the Pi network.
 - `GET /api/v1/broadcasts/current` — Details of the active broadcast with `embedUrl` for preview player.
 
 ---
+
+### Restart during a service
+On start pitube looks for a broadcast that is still `live` or `testing` on YouTube, adopts it and restarts the caption sender at the sequence number saved in `PITUBE_STATE_FILE` (only if the saved broadcast id matches). Without the state file the sequence starts at 0.
 
 ## Architecture & Integration Contract
 

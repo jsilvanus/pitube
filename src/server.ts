@@ -10,6 +10,8 @@ import { CaptionPipeline } from "./captions/pipeline.js";
 import { GatewaySSEClient } from "./gateway/client.js";
 import { GatewayStatusReporter } from "./gateway/reporter.js";
 import { LifecycleCoordinator } from "./lifecycle/coordinator.js";
+import { StateStore } from "./state.js";
+import { EncoderClient } from "./encoder/client.js";
 import { registerRoutes } from "./routes.js";
 import { registerYouTubeOAuthRoutes } from "./youtube/oauth.js";
 
@@ -53,6 +55,18 @@ export function buildApp(config: PitubeConfig): PitubeApp {
     captionPipeline,
     captionBaseUrl: config.captionBaseUrl,
     fallbackStreamKey: config.youtubeStreamKey,
+    streamId: config.streamId,
+    stateStore: new StateStore(config.stateFile),
+    ...(config.encoderUrl
+      ? {
+          encoder: new EncoderClient({
+            baseUrl: config.encoderUrl,
+            token: config.encoderToken,
+            unit: config.encoderUnit,
+            channel: config.encoderChannel,
+          }),
+        }
+      : {}),
   });
 
   // 4. Gateway SSE Client
@@ -104,9 +118,13 @@ export function buildApp(config: PitubeConfig): PitubeApp {
   });
 
   const start = async () => {
+    await server.listen({ port: config.port, host: config.host });
     gatewayClient.start();
     statusReporter.start();
-    await server.listen({ port: config.port, host: config.host });
+    // Pick up a broadcast that is still live after a restart. Failure must not stop the service.
+    coordinator.recover().catch((err: unknown) => {
+      console.error("[pitube] Recovery failed:", err instanceof Error ? err.message : String(err));
+    });
   };
 
   const stop = async () => {
