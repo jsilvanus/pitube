@@ -31,7 +31,7 @@
   "pi": {
     "service": "pitube",
     "displayName": "PiTube",
-    "layer": "consumer-edge",
+    "layer": "Layer 4: Egress",
     "port": 3500,
     "ports": {},
     "healthEndpoint": "/health",
