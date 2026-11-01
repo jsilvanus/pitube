@@ -63,7 +63,7 @@ for (const [method, path, operationId, summary, x] of ops) {
 const doc = {
   openapi: "3.0.3",
   info: { title: "pitube", version: "0.1.0", description: "The Pi's only YouTube connection: broadcasts, streams, lifecycle and live captions. Never touches video." },
-  servers: [{ url: "http://127.0.0.1:3105" }],
+  servers: [{ url: "http://127.0.0.1:3500" }],
   security: [{ bearer: [] }],
   components: { securitySchemes: { bearer: { type: "http", scheme: "bearer" } } },
   paths,

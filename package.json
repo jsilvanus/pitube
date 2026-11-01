@@ -32,7 +32,7 @@
     "service": "pitube",
     "displayName": "PiTube",
     "layer": "consumer-edge",
-    "port": 3105,
+    "port": 3500,
     "ports": {},
     "healthEndpoint": "/health",
     "envPortVar": "PITUBE_PORT"

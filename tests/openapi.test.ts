@@ -26,7 +26,7 @@ describe("OpenAPI and CLI", () => {
   it("builds a PATCH with a path parameter and JSON body from flags", () => {
     const op = ops.find((o) => o.operationId === "broadcasts-update")!;
     const { url, init } = buildRequest(op, ["bc 1", "--title", "Messu"], { PITUBE_API_KEY: "k" });
-    assert.equal(url, "http://127.0.0.1:3105/api/v1/broadcasts/bc%201");
+    assert.equal(url, "http://127.0.0.1:3500/api/v1/broadcasts/bc%201");
     assert.equal(init.method, "PATCH");
     assert.equal(init.body, '{"title":"Messu"}');
     assert.equal((init.headers as Record<string, string>)["Authorization"], "Bearer k");
@@ -34,7 +34,7 @@ describe("OpenAPI and CLI", () => {
 
   it("builds query parameters and typed body values", () => {
     const list = ops.find((o) => o.operationId === "broadcasts-list")!;
-    assert.equal(buildRequest(list, ["--status", "active"], {}).url, "http://127.0.0.1:3105/api/v1/broadcasts?status=active");
+    assert.equal(buildRequest(list, ["--status", "active"], {}).url, "http://127.0.0.1:3500/api/v1/broadcasts?status=active");
     const apply = ops.find((o) => o.operationId === "ingest-apply")!;
     assert.equal(buildRequest(apply, ["--unit", "2", "--channel", "2"], {}).init.body, '{"unit":2,"channel":2}');
   });

@@ -6,7 +6,7 @@ import path from "node:path";
 import fastify from "fastify";
 import { buildAuthUrl, registerYouTubeOAuthRoutes, saveRefreshToken, YOUTUBE_SCOPE } from "../src/youtube/oauth.js";
 
-const REDIRECT = "http://localhost:3105/oauth/callback";
+const REDIRECT = "http://localhost:3500/oauth/callback";
 
 function tempEnv(): string {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "pitube-")), ".env");

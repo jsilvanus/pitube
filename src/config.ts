@@ -51,11 +51,11 @@ export interface PitubeConfig {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): PitubeConfig {
-  const port = parseInt(env.PITUBE_PORT || "3105", 10);
+  const port = parseInt(env.PITUBE_PORT || "3500", 10);
   const host = env.PITUBE_HOST || "0.0.0.0";
   const apiKey = env.PITUBE_API_KEY?.trim() || null;
 
-  const gatewayUrl = (env.PITUBE_GATEWAY_URL || "http://127.0.0.1:3100").replace(/\/+$/, "");
+  const gatewayUrl = (env.PITUBE_GATEWAY_URL || "http://127.0.0.1:3000").replace(/\/+$/, "");
   const gatewayToken = env.PITUBE_GATEWAY_TOKEN?.trim() || null;
 
   const youtubeClientId = env.YOUTUBE_CLIENT_ID?.trim() || null;

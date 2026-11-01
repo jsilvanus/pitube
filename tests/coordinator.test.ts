@@ -404,7 +404,7 @@ describe("LifecycleCoordinator", () => {
     const sent: { url: string; body: any }[] = [];
     const { EncoderClient } = await import("../src/encoder/client.js");
     const encoder = new EncoderClient({
-      baseUrl: "http://127.0.0.1:3109",
+      baseUrl: "http://127.0.0.1:3104",
       unit: 1,
       channel: 1,
       fetchFn: async (url, init) => {
@@ -420,7 +420,7 @@ describe("LifecycleCoordinator", () => {
     await coordinator.selectBroadcast("bc_1");
     const result = await coordinator.applyIngestToEncoder();
     assert.deepEqual(result, { unit: 1, channel: 1 });
-    assert.equal(sent[0]?.url, "http://127.0.0.1:3109/api/v1/encoder/1/rtmp/1");
+    assert.equal(sent[0]?.url, "http://127.0.0.1:3104/api/v1/encoder/1/rtmp/1");
     assert.deepEqual(sent[0]?.body, { url: "rtmp://a.rtmp.youtube.com/live2", streamName: "SECRETKEY-1234" });
     coordinator.stop();
   });
