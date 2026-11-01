@@ -185,10 +185,13 @@ export class YouTubeClient {
   }
 
   /**
-   * Change a broadcast's privacy (public, unlisted, private). liveBroadcasts.update needs the
-   * title and scheduled start time again, so the current resource is read and sent back.
+   * Change title, description, scheduled start or privacy. liveBroadcasts.update needs the title and
+   * scheduled start time again, so the current resource is read and merged.
    */
-  async setPrivacy(broadcastId: string, privacy: BroadcastPrivacy): Promise<BroadcastSummary> {
+  async updateBroadcast(
+    broadcastId: string,
+    changes: { title?: string; description?: string; scheduledStartTime?: string; privacy?: BroadcastPrivacy }
+  ): Promise<BroadcastSummary> {
     const current = await this.request<LiveBroadcastListResponse>(
       `/liveBroadcasts?part=snippet,status,contentDetails&id=${encodeURIComponent(broadcastId)}`
     );
@@ -197,12 +200,12 @@ export class YouTubeClient {
     const body = {
       id: broadcastId,
       snippet: {
-        title: item.snippet.title,
-        description: item.snippet.description,
-        scheduledStartTime: item.snippet.scheduledStartTime,
+        title: changes.title ?? item.snippet.title,
+        description: changes.description ?? item.snippet.description,
+        scheduledStartTime: changes.scheduledStartTime ?? item.snippet.scheduledStartTime,
       },
       status: {
-        privacyStatus: privacy,
+        privacyStatus: changes.privacy ?? item.status.privacyStatus,
         selfDeclaredMadeForKids: false,
       },
     };
@@ -214,6 +217,11 @@ export class YouTubeClient {
     // The update response carries no contentDetails; keep the ones read before.
     updated.contentDetails = item.contentDetails;
     return this.mapBroadcast(updated);
+  }
+
+  /** Change a broadcast's privacy (public, unlisted, private). */
+  async setPrivacy(broadcastId: string, privacy: BroadcastPrivacy): Promise<BroadcastSummary> {
+    return this.updateBroadcast(broadcastId, { privacy });
   }
 
   /**

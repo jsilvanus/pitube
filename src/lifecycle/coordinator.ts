@@ -5,6 +5,8 @@
 import { YouTubeClient } from "../youtube/client.js";
 import { CaptionPipeline } from "../captions/pipeline.js";
 import { LiveCaptionSender } from "../captions/sender.js";
+import { randomBytes } from "node:crypto";
+import type { EventBus } from "../events.js";
 import type { StateStore } from "../state.js";
 import type { EncoderClient } from "../encoder/client.js";
 import type { LiveStreamResource } from "../youtube/types.js";
@@ -30,6 +32,10 @@ export interface LifecycleCoordinatorOptions {
   streamId?: string | null;
   stateStore?: StateStore;
   encoder?: EncoderClient;
+  events?: EventBus;
+  /** Ending needs a confirmToken from stopRequest() (PITUBE_REQUIRE_STOP_CONFIRM). */
+  requireStopConfirm?: boolean;
+  confirmTtlMs?: number;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   /** How long to wait for YouTube to report the testing state (default 90 s). */
@@ -38,6 +44,7 @@ export interface LifecycleCoordinatorOptions {
 }
 
 export type StartTarget = "testing" | "live";
+export type StatusLevel = "idle" | "upcoming" | "testing" | "live" | "unhealthy" | "ended";
 
 export class LifecycleCoordinator {
   private readonly client?: YouTubeClient;
@@ -52,6 +59,11 @@ export class LifecycleCoordinator {
   private readonly testingTimeoutMs: number;
   private readonly pollMs: number;
   private ingestAddress: string | null = null;
+  private readonly events?: EventBus;
+  private readonly requireStopConfirm: boolean;
+  private readonly confirmTtlMs: number;
+  private stopToken: { token: string; broadcastId: string; expiresAt: number } | null = null;
+  private lastSnapshot = { level: "idle" as StatusLevel, broadcastId: null as string | null, state: "idle" as string, health: "unknown" as string };
 
   private state: BroadcastState = "idle";
   private selectedBroadcast: BroadcastSummary | null = null;
@@ -71,6 +83,38 @@ export class LifecycleCoordinator {
     this.encoder = options.encoder;
     this.testingTimeoutMs = options.testingTimeoutMs ?? 90_000;
     this.pollMs = options.pollMs ?? 2_000;
+    this.events = options.events;
+    this.requireStopConfirm = options.requireStopConfirm ?? false;
+    this.confirmTtlMs = options.confirmTtlMs ?? 60_000;
+  }
+
+  /** idle | upcoming | testing | live | unhealthy | ended, for the status endpoint and events. */
+  getLevel(): StatusLevel {
+    if (!this.selectedBroadcast) return "idle";
+    if (this.state === "live") {
+      return this.streamHealth === "bad" || this.streamHealth === "noData" ? "unhealthy" : "live";
+    }
+    if (this.state === "testing") return "testing";
+    if (this.state === "complete") return "ended";
+    return "upcoming";
+  }
+
+  /** Publish status, broadcast.status and stream.health events when something changed. */
+  private emitChanges(): void {
+    if (!this.events) return;
+    const next = {
+      level: this.getLevel(),
+      broadcastId: this.selectedBroadcast?.id ?? null,
+      state: this.state as string,
+      health: this.streamHealth as string,
+    };
+    const prev = this.lastSnapshot;
+    this.lastSnapshot = next;
+    if (next.broadcastId !== prev.broadcastId || next.state !== prev.state) {
+      this.events.publish("broadcast.status", { id: next.broadcastId, state: next.state });
+    }
+    if (next.health !== prev.health) this.events.publish("stream.health", { health: next.health });
+    if (next.level !== prev.level) this.events.publish("status", { level: next.level, live: next.state === "live" });
   }
 
   getState(): BroadcastState {
@@ -190,6 +234,7 @@ export class LifecycleCoordinator {
     this.adopt(target);
     await this.resolveStreamKey(target);
     this.afterAdopt(target);
+    this.emitChanges();
 
     return target;
   }
@@ -227,6 +272,7 @@ export class LifecycleCoordinator {
     // Bind a stream to the newly created broadcast
     await this.resolveStreamKey(created);
     this.afterAdopt(created);
+    this.emitChanges();
 
     return created;
   }
@@ -293,6 +339,8 @@ export class LifecycleCoordinator {
       this.state = this.selectedBroadcast.status;
       if (to === "testing") {
         this.startHealthPolling();
+        this.events?.publish("broadcast.transition", { id, to: "testing" });
+        this.emitChanges();
         return this.selectedBroadcast;
       }
 
@@ -311,6 +359,8 @@ export class LifecycleCoordinator {
     }
 
     this.startHealthPolling();
+    this.events?.publish("broadcast.transition", { id: this.selectedBroadcast.id, to: "live" });
+    this.emitChanges();
     return this.selectedBroadcast;
   }
 
@@ -342,10 +392,11 @@ export class LifecycleCoordinator {
    * Stop the live broadcast (transitions to 'complete', shuts down caption sender).
    * A failed transition is an error and keeps the selection, so the operator can retry.
    */
-  async stopBroadcast(): Promise<BroadcastSummary> {
+  async stopBroadcast(confirmToken?: string): Promise<BroadcastSummary> {
     if (!this.selectedBroadcast) {
       throw new Error("Cannot stop broadcast: No broadcast selected");
     }
+    if (this.requireStopConfirm) this.checkStopToken(confirmToken);
 
     if (this.client) {
       try {
@@ -370,21 +421,58 @@ export class LifecycleCoordinator {
     this.boundStreamKey = null;
     this.ingestAddress = null;
     this.state = "idle";
+    this.stopToken = null;
+    this.events?.publish("broadcast.transition", { id: result.id, to: "complete" });
+    this.emitChanges();
     return result;
+  }
+
+  /** Ending step 1: a short-lived token bound to the selected broadcast; changes nothing. */
+  stopRequest(): { confirmToken: string; broadcastId: string; expiresInMs: number; required: boolean } {
+    if (!this.selectedBroadcast) throw new Error("Cannot stop broadcast: No broadcast selected");
+    const token = randomBytes(12).toString("hex");
+    this.stopToken = { token, broadcastId: this.selectedBroadcast.id, expiresAt: this.now() + this.confirmTtlMs };
+    return {
+      confirmToken: token,
+      broadcastId: this.selectedBroadcast.id,
+      expiresInMs: this.confirmTtlMs,
+      required: this.requireStopConfirm,
+    };
+  }
+
+  private checkStopToken(confirmToken?: string): void {
+    const t = this.stopToken;
+    if (!confirmToken || !t || t.token !== confirmToken || t.broadcastId !== this.selectedBroadcast?.id || t.expiresAt < this.now()) {
+      throw new Error("Stopping needs a valid confirmToken from POST /api/v1/broadcasts/stop/request");
+    }
+  }
+
+  /** Change title, description, scheduled start or privacy; defaults to the selected broadcast. */
+  async updateBroadcast(
+    changes: { title?: string; description?: string; scheduledStartTime?: string; privacy?: BroadcastPrivacy },
+    broadcastId?: string
+  ): Promise<BroadcastSummary> {
+    const id = broadcastId || this.selectedBroadcast?.id;
+    if (!id) throw new Error("No broadcast selected");
+    if (!this.client) throw new Error("YouTube is not configured");
+    const updated = await this.client.updateBroadcast(id, changes);
+    if (this.selectedBroadcast?.id === id) {
+      this.selectedBroadcast = {
+        ...this.selectedBroadcast,
+        title: updated.title,
+        description: updated.description,
+        scheduledStartTime: updated.scheduledStartTime,
+        privacy: updated.privacy,
+      };
+    }
+    return updated;
   }
 
   /**
    * Change privacy (public, unlisted, private) of a broadcast; defaults to the selected one.
    */
   async setPrivacy(privacy: BroadcastPrivacy, broadcastId?: string): Promise<BroadcastSummary> {
-    const id = broadcastId || this.selectedBroadcast?.id;
-    if (!id) throw new Error("No broadcast selected");
-    if (!this.client) throw new Error("YouTube is not configured");
-    const updated = await this.client.setPrivacy(id, privacy);
-    if (this.selectedBroadcast?.id === id) {
-      this.selectedBroadcast = { ...this.selectedBroadcast, privacy: updated.privacy };
-    }
-    return updated;
+    return this.updateBroadcast({ privacy }, broadcastId);
   }
 
   /** Watch and embed URLs plus privacy for a broadcast; defaults to the selected one. */
@@ -440,6 +528,7 @@ export class LifecycleCoordinator {
     this.adopt(target);
     await this.resolveStreamKey(target);
     this.afterAdopt(target);
+    this.emitChanges();
     return target;
   }
 
@@ -508,6 +597,7 @@ export class LifecycleCoordinator {
       } catch {
         this.streamHealth = "unknown";
       }
+      this.emitChanges();
     };
     void poll();
     this.healthTimer = setInterval(poll, 15_000);
@@ -526,6 +616,7 @@ export class LifecycleCoordinator {
     return {
       service: "pitube",
       state: this.state,
+      level: this.getLevel(),
       selectedBroadcast: this.selectedBroadcast,
       streamHealth: this.streamHealth,
       captions: this.captionPipeline.getStats(),

@@ -6,11 +6,15 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import type { LifecycleCoordinator } from "./lifecycle/coordinator.js";
 import type { GatewaySSEClient } from "./gateway/client.js";
 import type { AdHocBroadcastInput } from "./types.js";
+import type { EventBus } from "./events.js";
+import type { YouTubeAuth } from "./youtube/auth.js";
 
 export interface PitubeRoutesOptions {
   coordinator: LifecycleCoordinator;
   gatewayClient: GatewaySSEClient;
   apiKey?: string | null;
+  events?: EventBus;
+  auth?: YouTubeAuth;
 }
 
 const THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
@@ -23,7 +27,7 @@ export function registerRoutes(
   app: FastifyInstance,
   options: PitubeRoutesOptions
 ): void {
-  const { coordinator, gatewayClient, apiKey } = options;
+  const { coordinator, gatewayClient, apiKey, events, auth } = options;
 
   // Raw image bodies for the thumbnail route
   app.addContentTypeParser(["image/jpeg", "image/png", "image/gif"], { parseAs: "buffer", bodyLimit: THUMBNAIL_MAX_BYTES + 1024 }, (_req, body, done) => {
@@ -49,6 +53,32 @@ export function registerRoutes(
   // Health
   app.get("/health", async () => {
     return { ok: true, service: "pitube" };
+  });
+
+  // Server-Sent Events: status, broadcast.status, broadcast.transition, stream.health, auth.health
+  app.get("/api/v1/events", async (request, reply) => {
+    reply.hijack();
+    const res = reply.raw;
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    const send = (type: string, data: unknown) => res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+    send("ready", { level: coordinator.getLevel(), time: new Date().toISOString() });
+    const unsubscribe = events?.subscribe((e) => send(e.type, { ...e.data, at: e.at }));
+    const keepAlive = setInterval(() => res.write(": keep-alive\n\n"), 15_000);
+    request.raw.on("close", () => {
+      clearInterval(keepAlive);
+      unsubscribe?.();
+    });
+  });
+
+  // Sign-in state without secrets; check refreshes the token now
+  app.get("/api/v1/auth/health", async () => auth?.health() ?? { state: "missing", lastRefreshAt: null, accessTokenExpiresAt: null, lastError: null });
+  app.post("/api/v1/auth/check", async (_request, reply) => {
+    if (!auth) return reply.code(400).send({ error: "YouTube is not configured" });
+    return reply.code(200).send(await auth.check());
   });
 
   // Overall pitube status
@@ -215,10 +245,52 @@ export function registerRoutes(
     }
   });
 
-  // Transition selected broadcast to complete
-  app.post("/api/v1/broadcasts/stop", async (_request, reply) => {
+  // Ending step 1: returns a short-lived confirmToken, changes nothing
+  app.post("/api/v1/broadcasts/stop/request", async (_request, reply) => {
     try {
-      const result = await coordinator.stopBroadcast();
+      return reply.code(200).send(coordinator.stopRequest());
+    } catch (err: unknown) {
+      return reply.code(400).send({ error: errorMessage(err) });
+    }
+  });
+
+  // Edit title, description, scheduled start or privacy (selected broadcast: use its id)
+  app.patch<{
+    Params: { id: string };
+    Body: { title?: string; description?: string; scheduledStartTime?: string; privacy?: string } | undefined;
+  }>("/api/v1/broadcasts/:id", async (request, reply) => {
+    const b = request.body ?? {};
+    if (b.privacy !== undefined && b.privacy !== "public" && b.privacy !== "unlisted" && b.privacy !== "private") {
+      return reply.code(400).send({ error: "privacy must be public, unlisted or private" });
+    }
+    for (const key of ["title", "description", "scheduledStartTime"] as const) {
+      if (b[key] !== undefined && typeof b[key] !== "string") {
+        return reply.code(400).send({ error: `${key} must be a string` });
+      }
+    }
+    if (b.title !== undefined && !b.title.trim()) {
+      return reply.code(400).send({ error: "title cannot be empty" });
+    }
+    if (b.title === undefined && b.description === undefined && b.scheduledStartTime === undefined && b.privacy === undefined) {
+      return reply.code(400).send({ error: "nothing to change" });
+    }
+    try {
+      const changes = {
+        ...(b.title !== undefined ? { title: b.title.trim() } : {}),
+        ...(b.description !== undefined ? { description: b.description } : {}),
+        ...(b.scheduledStartTime !== undefined ? { scheduledStartTime: b.scheduledStartTime } : {}),
+        ...(b.privacy !== undefined ? { privacy: b.privacy as "public" | "unlisted" | "private" } : {}),
+      };
+      return reply.code(200).send(await coordinator.updateBroadcast(changes, request.params.id));
+    } catch (err: unknown) {
+      return reply.code(400).send({ error: errorMessage(err) });
+    }
+  });
+
+  // Transition selected broadcast to complete (body {"confirmToken"} when PITUBE_REQUIRE_STOP_CONFIRM=1)
+  app.post<{ Body: { confirmToken?: string } | undefined }>("/api/v1/broadcasts/stop", async (request, reply) => {
+    try {
+      const result = await coordinator.stopBroadcast(request.body?.confirmToken);
       return reply.code(200).send(result);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

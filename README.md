@@ -52,6 +52,8 @@ Set via environment variables or a `.env` file (see `.env.example`):
 | `PITUBE_STATE_FILE` | Keeps the caption sequence number and active broadcast id over a restart (never the stream key). Empty disables | `./pitube-state.json` |
 | `PITUBE_ENCODER_URL` | piencoder base URL for `POST /api/v1/ingest/apply` (unset disables) | *(none)* |
 | `PITUBE_ENCODER_TOKEN` / `PITUBE_ENCODER_UNIT` / `PITUBE_ENCODER_CHANNEL` | piencoder bearer token, encoder unit and channel (1 or 2) | *(none)* / `1` / `1` |
+| `PITUBE_REQUIRE_STOP_CONFIRM` | `1` makes ending a broadcast two steps: `POST /broadcasts/stop/request` returns a `confirmToken`, then `POST /broadcasts/stop {confirmToken}`. Off until picontrol and picontrol-mcp send the token. | off |
+| `PITUBE_AUTH_CHECK_MS` | Interval of the sign-in check (0 disables) | `86400000` (24 h) |
 | `PITUBE_DELAY_MS` | Video delay compensation for captions | `30000` (30 s, YouTube guidance) |
 | `PITUBE_STALE_CAPTION_MS`| Max age before dropping stale transcripts | `90000` (90 s) |
 
@@ -66,6 +68,10 @@ Set via environment variables or a `.env` file (see `.env.example`):
 - `POST /api/v1/broadcasts/create` — Create a broadcast (`{ "title": "...", "privacy": "unlisted"(default)|"public"|"private", "autoSelect": true }`).
 - `POST /api/v1/broadcasts/start` — Refuses until the stream receives data. Goes ready → testing (waits for YouTube) → live and starts captions. `{ "to": "testing" }` stops at testing.
 - `POST /api/v1/broadcasts/stop` — Complete the broadcast and stop captions. A failed transition is an error and keeps the selection.
+- `PATCH /api/v1/broadcasts/:id` — Change `title`, `description`, `scheduledStartTime` or `privacy`.
+- `POST /api/v1/broadcasts/stop/request` — Ending step 1: returns a short-lived `confirmToken`, changes nothing.
+- `GET /api/v1/events` — Server-Sent Events: `status` (level changes), `broadcast.status`, `broadcast.transition`, `stream.health`, `auth.health`. `GET /status` has `level`: `idle|upcoming|testing|live|unhealthy|ended`.
+- `GET /api/v1/auth/health` — Sign-in state (`unchecked|ok|revoked|refresh_failed`), never secrets. `POST /api/v1/auth/check` refreshes the token now; it also runs daily.
 - `POST /api/v1/broadcasts/privacy` — `{ "privacy": "public"|"unlisted"|"private", "broadcastId"? }` (default: selected broadcast).
 - `GET /api/v1/broadcasts/url?broadcastId=` — `watchUrl`, `embedUrl`, privacy, status.
 - `POST /api/v1/broadcasts/thumbnail?broadcastId=` — Raw image body (`Content-Type: image/jpeg|png|gif`, max 2 MB). Uses `thumbnails.set`; the YouTube channel must be verified.
@@ -75,6 +81,9 @@ Set via environment variables or a `.env` file (see `.env.example`):
 - `GET /api/v1/broadcasts/current` — Details of the active broadcast with `embedUrl` for preview player.
 
 ---
+
+### OpenAPI and CLI
+`openapi/openapi.json` is built from `scripts/build-openapi.mjs` (`npm run openapi`); a test checks that every documented operation is a registered route. The `pitube` CLI makes one command per operationId from that file: `pitube help`, `pitube broadcasts-update <id> --title "..."`, `pitube broadcasts-thumbnail --file cover.png`. Env: `PITUBE_URL`, `PITUBE_API_KEY`.
 
 ### Restart during a service
 On start pitube looks for a broadcast that is still `live` or `testing` on YouTube, adopts it and restarts the caption sender at the sequence number saved in `PITUBE_STATE_FILE` (only if the saved broadcast id matches). Without the state file the sequence starts at 0.

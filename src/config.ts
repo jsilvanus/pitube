@@ -18,6 +18,10 @@ export interface PitubeConfig {
   streamId: string | null;
   /** File that keeps the caption sequence over a restart (PITUBE_STATE_FILE; empty disables). */
   stateFile: string | null;
+  /** Ending a broadcast needs a confirmToken from POST /broadcasts/stop/request (PITUBE_REQUIRE_STOP_CONFIRM=1). */
+  requireStopConfirm: boolean;
+  /** Interval of the sign-in check (default 24 h; 0 disables). */
+  authCheckIntervalMs: number;
   /** piencoder base URL for pushing the RTMP target (PITUBE_ENCODER_URL; unset disables). */
   encoderUrl: string | null;
   encoderToken: string | null;
@@ -61,6 +65,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PitubeConfig {
 
   const streamId = env.PITUBE_STREAM_ID?.trim() || null;
   const stateFile = env.PITUBE_STATE_FILE === undefined ? "./pitube-state.json" : env.PITUBE_STATE_FILE.trim() || null;
+  const requireStopConfirm = /^(1|true|yes)$/i.test(env.PITUBE_REQUIRE_STOP_CONFIRM ?? "");
+  const authCheckParsed = parseInt(env.PITUBE_AUTH_CHECK_MS || "86400000", 10);
+  const authCheckIntervalMs = Number.isFinite(authCheckParsed) && authCheckParsed >= 0 ? authCheckParsed : 86_400_000;
   const encoderUrl = env.PITUBE_ENCODER_URL?.trim() || null;
   const encoderToken = env.PITUBE_ENCODER_TOKEN?.trim() || null;
   const encoderUnit = Math.max(1, parseInt(env.PITUBE_ENCODER_UNIT || "1", 10) || 1);
@@ -85,6 +92,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PitubeConfig {
     youtubeStreamKey,
     streamId,
     stateFile,
+    requireStopConfirm,
+    authCheckIntervalMs,
     encoderUrl,
     encoderToken,
     encoderUnit,

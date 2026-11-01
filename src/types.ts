@@ -77,6 +77,7 @@ export interface CaptionStats {
 export interface PitubeStatus {
   service: "pitube";
   state: BroadcastState;
+  level: "idle" | "upcoming" | "testing" | "live" | "unhealthy" | "ended";
   selectedBroadcast: BroadcastSummary | null;
   streamHealth: StreamHealth;
   captions: CaptionStats;

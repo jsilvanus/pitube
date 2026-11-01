@@ -166,5 +166,30 @@ describe("HTTP Routes", () => {
       assert.equal(res.statusCode, 200);
       assert.deepEqual(JSON.parse(res.payload), { items: [] });
     });
+
+    it("PATCH validates input", async () => {
+      const app = buildApp(config);
+      const empty = await app.server.inject({ method: "PATCH", url: "/api/v1/broadcasts/abc", headers, payload: {} });
+      assert.equal(empty.statusCode, 400);
+      const bad = await app.server.inject({ method: "PATCH", url: "/api/v1/broadcasts/abc", headers, payload: { privacy: "x" } });
+      assert.equal(bad.statusCode, 400);
+      const noYt = await app.server.inject({ method: "PATCH", url: "/api/v1/broadcasts/abc", headers, payload: { title: "T" } });
+      assert.equal(noYt.statusCode, 400);
+      assert.match(JSON.parse(noYt.payload).error, /not configured/);
+    });
+
+    it("status has a level and auth health reports missing without credentials", async () => {
+      const app = buildApp(config);
+      const status = JSON.parse((await app.server.inject({ method: "GET", url: "/api/v1/status" })).payload);
+      assert.equal(status.level, "idle");
+      const auth = JSON.parse((await app.server.inject({ method: "GET", url: "/api/v1/auth/health" })).payload);
+      assert.equal(auth.state, "missing");
+    });
+
+    it("stop/request without a selection is a 400", async () => {
+      const app = buildApp(config);
+      const res = await app.server.inject({ method: "POST", url: "/api/v1/broadcasts/stop/request", headers });
+      assert.equal(res.statusCode, 400);
+    });
   });
 });

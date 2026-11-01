@@ -47,6 +47,8 @@ function fakeYouTube(opts: { streamStatus?: string; monitor?: boolean; testingAf
     if (u.pathname.endsWith("/liveBroadcasts") && method === "PUT") {
       const body = JSON.parse(String(init!.body));
       bc.status.privacyStatus = body.status.privacyStatus;
+      bc.snippet.title = body.snippet.title;
+      (bc.snippet as any).description = body.snippet.description;
       return json({ ...bc, contentDetails: undefined });
     }
     if (u.pathname.endsWith("/liveBroadcasts")) {
@@ -420,6 +422,82 @@ describe("LifecycleCoordinator", () => {
     assert.deepEqual(result, { unit: 1, channel: 1 });
     assert.equal(sent[0]?.url, "http://127.0.0.1:3109/api/v1/encoder/1/rtmp/1");
     assert.deepEqual(sent[0]?.body, { url: "rtmp://a.rtmp.youtube.com/live2", streamName: "SECRETKEY-1234" });
+    coordinator.stop();
+  });
+
+  it("ending needs a valid confirmToken when confirmation is required", async () => {
+    const yt = fakeYouTube();
+    const coordinator = new LifecycleCoordinator({
+      client: new YouTubeClient({ fetchFn: yt.fetchFn }),
+      captionPipeline: new CaptionPipeline(),
+      sleep: noSleep,
+      requireStopConfirm: true,
+    });
+    await coordinator.selectBroadcast("bc_1");
+    await coordinator.startBroadcast();
+    await assert.rejects(() => coordinator.stopBroadcast(), /confirmToken/);
+    await assert.rejects(() => coordinator.stopBroadcast("wrong"), /confirmToken/);
+    const { confirmToken } = coordinator.stopRequest();
+    const done = await coordinator.stopBroadcast(confirmToken);
+    assert.equal(done.status, "complete");
+    // The token cannot be used twice
+    await coordinator.selectBroadcast("bc_1").catch(() => {});
+    coordinator.stop();
+  });
+
+  it("an expired confirmToken is refused", async () => {
+    const yt = fakeYouTube();
+    let t = 1_000;
+    const coordinator = new LifecycleCoordinator({
+      client: new YouTubeClient({ fetchFn: yt.fetchFn }),
+      captionPipeline: new CaptionPipeline(),
+      sleep: noSleep,
+      requireStopConfirm: true,
+      confirmTtlMs: 1000,
+      now: () => t,
+    });
+    await coordinator.selectBroadcast("bc_1");
+    const { confirmToken } = coordinator.stopRequest();
+    t += 5000;
+    await assert.rejects(() => coordinator.stopBroadcast(confirmToken), /confirmToken/);
+    coordinator.stop();
+  });
+
+  it("publishes status, broadcast and transition events and reports the level", async () => {
+    const { EventBus } = await import("../src/events.js");
+    const events = new EventBus();
+    const seen: string[] = [];
+    events.subscribe((e) => seen.push(e.type));
+    const yt = fakeYouTube();
+    const coordinator = new LifecycleCoordinator({
+      client: new YouTubeClient({ fetchFn: yt.fetchFn }),
+      captionPipeline: new CaptionPipeline(),
+      sleep: noSleep,
+      events,
+    });
+    assert.equal(coordinator.getLevel(), "idle");
+    await coordinator.selectBroadcast("bc_1");
+    assert.equal(coordinator.getLevel(), "upcoming");
+    await coordinator.startBroadcast();
+    assert.equal(coordinator.getLevel(), "live");
+    assert.ok(seen.includes("broadcast.status"));
+    assert.ok(seen.includes("status"));
+    assert.ok(seen.includes("broadcast.transition"));
+    coordinator.stop();
+  });
+
+  it("edits title and description while keeping the privacy", async () => {
+    const yt = fakeYouTube();
+    const coordinator = new LifecycleCoordinator({
+      client: new YouTubeClient({ fetchFn: yt.fetchFn }),
+      captionPipeline: new CaptionPipeline(),
+    });
+    await coordinator.selectBroadcast("bc_1");
+    await coordinator.updateBroadcast({ title: "Uusi otsikko", description: "Kuvaus" });
+    const put = yt.bodies.find((b: any) => b.snippet?.description === "Kuvaus") as any;
+    assert.equal(put.snippet.title, "Uusi otsikko");
+    assert.equal(put.status.privacyStatus, "unlisted");
+    assert.equal(coordinator.getSelectedBroadcast()?.title, "Uusi otsikko");
     coordinator.stop();
   });
 });
