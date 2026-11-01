@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "YouTube lifecycle handler and live caption sender for the pi* stack",
+  "packageManager": "pnpm@11.23.0",
   "engines": {
     "node": ">=22"
   },
@@ -26,5 +27,14 @@
     "@types/node": "^22.13.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.3"
+  },
+  "pi": {
+    "service": "pitube",
+    "displayName": "PiTube",
+    "layer": "consumer-edge",
+    "port": 3105,
+    "ports": {},
+    "healthEndpoint": "/health",
+    "envPortVar": "PITUBE_PORT"
   }
 }

@@ -1,4 +1,4 @@
-// Writes openapi/openapi.json from the table below. Run: npm run openapi
+// Writes openapi/openapi.json from the table below. Run: pnpm run openapi
 // tests/openapi.test.ts checks that every operation here is a registered route.
 import { writeFileSync } from "node:fs";
 

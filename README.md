@@ -16,17 +16,17 @@ Secrets (stream keys and ingestion URLs) remain strictly isolated inside `pitube
 ### Installation & Build
 
 ```bash
-npm install
-npm run build
-npm test
+pnpm install
+pnpm run build
+pnpm test
 ```
 
 ### Running the Service
 
 ```bash
-npm run dev     # tsx watch src/main.ts
+pnpm run dev     # tsx watch src/main.ts
 # or
-npm start       # node dist/main.js
+pnpm start       # node dist/main.js
 ```
 
 ---
@@ -83,7 +83,7 @@ Set via environment variables or a `.env` file (see `.env.example`):
 ---
 
 ### OpenAPI and CLI
-`openapi/openapi.json` is built from `scripts/build-openapi.mjs` (`npm run openapi`); a test checks that every documented operation is a registered route. The `pitube` CLI makes one command per operationId from that file: `pitube help`, `pitube broadcasts-update <id> --title "..."`, `pitube broadcasts-thumbnail --file cover.png`. Env: `PITUBE_URL`, `PITUBE_API_KEY`.
+`openapi/openapi.json` is built from `scripts/build-openapi.mjs` (`pnpm run openapi`); a test checks that every documented operation is a registered route. The `pitube` CLI makes one command per operationId from that file: `pitube help`, `pitube broadcasts-update <id> --title "..."`, `pitube broadcasts-thumbnail --file cover.png`. Env: `PITUBE_URL`, `PITUBE_API_KEY`.
 
 ### Restart during a service
 On start pitube looks for a broadcast that is still `live` or `testing` on YouTube, adopts it and restarts the caption sender at the sequence number saved in `PITUBE_STATE_FILE` (only if the saved broadcast id matches). Without the state file the sequence starts at 0.
@@ -101,7 +101,7 @@ This project is an integral component of the [Pi Production Ecosystem](file:///d
 
 > [!IMPORTANT]
 > Any changes to this repository's architectural role, API routes, communication protocols, exposed ports, dependencies, or runtime status **must be documented in the central `piecosystem` coordination repository** (`docs/projects-catalog.md` and `docs/inter-service-matrix.md`).
-> Always verify cross-system health with `npm run status` in `D:\piecosystem`.
+> Always verify cross-system health with `pnpm run status` in `D:\piecosystem`.
 
 ## Getting the YouTube refresh token (one time)
 
@@ -112,4 +112,4 @@ pitube can fetch `YOUTUBE_REFRESH_TOKEN` itself. It needs `YOUTUBE_CLIENT_ID` an
 3. In the browser on that computer open `http://localhost:3105/auth/youtube`, sign in with the YouTube account and approve. The scope is `https://www.googleapis.com/auth/youtube`; the request is `access_type=offline&prompt=consent`.
 4. The token is written to `PITUBE_ENV_FILE` (mode 600). Under systemd, set `PITUBE_ENV_FILE` to the unit's `EnvironmentFile` (on kirkonpi `/home/pi/apps/pitube.env`); the default `./.env` is a file the service never loads as `YOUTUBE_REFRESH_TOKEN=...`. It is never logged or shown. Restart pitube to use it.
 
-`pitube auth youtube` (`npm run pitube -- auth youtube`) prints these steps and the URL for the current settings. No broadcast is created or started. Not verified against real Google.
+`pitube auth youtube` (`pnpm run pitube -- auth youtube`) prints these steps and the URL for the current settings. No broadcast is created or started. Not verified against real Google.
