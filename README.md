@@ -88,6 +88,6 @@ pitube can fetch `YOUTUBE_REFRESH_TOKEN` itself. It needs `YOUTUBE_CLIENT_ID` an
 1. In Google Cloud (APIs & Services > Credentials > your OAuth client, type "Web application") add the authorised redirect URI `http://localhost:3105/oauth/callback` (use the port you run pitube on). Enable the YouTube Data API v3 and add yourself as a test user if the consent screen is in testing mode.
 2. On your own computer: `ssh -L 3105:localhost:3105 pi@kirkonpi.local`
 3. In the browser on that computer open `http://localhost:3105/auth/youtube`, sign in with the YouTube account and approve. The scope is `https://www.googleapis.com/auth/youtube`; the request is `access_type=offline&prompt=consent`.
-4. The token is written to `PITUBE_ENV_FILE` (mode 600) as `YOUTUBE_REFRESH_TOKEN=...`. It is never logged or shown. Restart pitube to use it.
+4. The token is written to `PITUBE_ENV_FILE` (mode 600). Under systemd, set `PITUBE_ENV_FILE` to the unit's `EnvironmentFile` (on kirkonpi `/home/pi/apps/pitube.env`); the default `./.env` is a file the service never loads as `YOUTUBE_REFRESH_TOKEN=...`. It is never logged or shown. Restart pitube to use it.
 
 `pitube auth youtube` (`npm run pitube -- auth youtube`) prints these steps and the URL for the current settings. No broadcast is created or started. Not verified against real Google.
