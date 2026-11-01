@@ -7,6 +7,15 @@ import type { TokenResponse } from "./types.js";
 
 const DEFAULT_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
+export type AuthState = "unchecked" | "ok" | "revoked" | "refresh_failed";
+
+export interface AuthHealth {
+  state: AuthState;
+  lastRefreshAt: string | null;
+  accessTokenExpiresAt: string | null;
+  lastError: string | null;
+}
+
 export interface YouTubeAuthConfig {
   clientId: string;
   clientSecret: string;
@@ -19,6 +28,11 @@ export class YouTubeAuth {
   private tokenExpiry: number = 0;
   private refreshPromise: Promise<string> | null = null;
   private readonly tokenUrl: string;
+  private state: AuthState = "unchecked";
+  private lastRefreshAt: number | null = null;
+  private lastError: string | null = null;
+  /** Called when the state changes (the event bus publishes auth.health). */
+  onHealthChange?: (health: AuthHealth) => void;
 
   constructor(
     private readonly config: YouTubeAuthConfig,
@@ -64,6 +78,8 @@ export class YouTubeAuth {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
+      this.lastError = `HTTP ${response.status}`;
+      this.setState(/invalid_grant/.test(errorText) ? "revoked" : "refresh_failed");
       throw new Error(`YouTube OAuth token refresh failed (${response.status}): ${errorText.slice(0, 300)}`);
     }
 
@@ -73,10 +89,41 @@ export class YouTubeAuth {
     }
 
     this.accessToken = data.access_token;
+    this.lastRefreshAt = Date.now();
+    this.lastError = null;
+    this.setState("ok");
     const expiresInSec = typeof data.expires_in === "number" ? data.expires_in : 3600;
     this.tokenExpiry = Date.now() + expiresInSec * 1000;
 
     return this.accessToken;
+  }
+
+  private setState(next: AuthState): void {
+    if (next !== this.state) {
+      this.state = next;
+      this.onHealthChange?.(this.health());
+    }
+  }
+
+  /** Sign-in state without secrets. */
+  health(): AuthHealth {
+    return {
+      state: this.state,
+      lastRefreshAt: this.lastRefreshAt ? new Date(this.lastRefreshAt).toISOString() : null,
+      accessTokenExpiresAt: this.tokenExpiry ? new Date(this.tokenExpiry).toISOString() : null,
+      lastError: this.lastError,
+    };
+  }
+
+  /** Force a refresh now so a dead sign-in shows up before Sunday, not during it. */
+  async check(): Promise<AuthHealth> {
+    this.invalidate();
+    try {
+      await this.getAccessToken();
+    } catch {
+      // recorded in health
+    }
+    return this.health();
   }
 
   /** Clear cached token (e.g. if an API call returned 401 Unauthorized) */

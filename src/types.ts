@@ -17,7 +17,22 @@ export interface BroadcastSummary {
   privacy: BroadcastPrivacy;
   status: BroadcastState;
   embedUrl: string;
+  /** Public watch page, https://www.youtube.com/watch?v=<id>. */
+  watchUrl?: string;
   streamId?: string;
+  /** True when YouTube requires the testing state before live. */
+  monitorStream?: boolean;
+}
+
+/** A YouTube liveStream (ingest). Never carries the stream key or ingestion URL. */
+export interface StreamSummary {
+  id: string;
+  title: string;
+  ingestionType?: string;
+  resolution?: string;
+  streamStatus?: string;
+  health: StreamHealth;
+  selected: boolean;
 }
 
 export interface AdHocBroadcastInput {
@@ -25,6 +40,8 @@ export interface AdHocBroadcastInput {
   privacy?: BroadcastPrivacy;
   description?: string;
   scheduledStartTime?: string;
+  /** Select the new broadcast right away (default true). */
+  autoSelect?: boolean;
 }
 
 /** Transcript payload received from pigateway SSE */
@@ -60,6 +77,7 @@ export interface CaptionStats {
 export interface PitubeStatus {
   service: "pitube";
   state: BroadcastState;
+  level: "idle" | "upcoming" | "testing" | "live" | "unhealthy" | "ended";
   selectedBroadcast: BroadcastSummary | null;
   streamHealth: StreamHealth;
   captions: CaptionStats;

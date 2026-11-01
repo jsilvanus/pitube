@@ -9,11 +9,16 @@ export interface LiveCaptionSenderOptions {
   streamKey: string;
   baseUrl?: string;
   verbose?: boolean;
+  /** Sequence number to continue from (restored after a restart). */
+  sequence?: number;
+  /** Called after every successful send with the next sequence number. */
+  onSequence?: (nextSequence: number) => void;
 }
 
 export class LiveCaptionSender {
   private readonly streamKey: string;
   private readonly sender: InstanceType<typeof YoutubeLiveCaptionSender>;
+  private readonly onSequence?: (nextSequence: number) => void;
   private isStarted = false;
   private stats: CaptionStats = {
     sent: 0,
@@ -24,10 +29,14 @@ export class LiveCaptionSender {
 
   constructor(options: LiveCaptionSenderOptions) {
     this.streamKey = options.streamKey;
-    const senderOpts: { streamKey: string; baseUrl?: string; verbose?: boolean } = {
+    this.onSequence = options.onSequence;
+    const senderOpts: { streamKey: string; baseUrl?: string; verbose?: boolean; sequence?: number } = {
       streamKey: options.streamKey,
       verbose: options.verbose ?? false,
     };
+    if (options.sequence && options.sequence > 0) {
+      senderOpts.sequence = options.sequence;
+    }
     if (options.baseUrl) {
       senderOpts.baseUrl = options.baseUrl;
     }
@@ -71,6 +80,7 @@ export class LiveCaptionSender {
       this.stats.sent++;
       this.stats.lastSentAt = Date.now();
       this.stats.lastError = null;
+      this.onSequence?.(this.getSequence());
       return true;
     } catch (err: unknown) {
       this.stats.dropped++;
@@ -78,6 +88,12 @@ export class LiveCaptionSender {
       this.stats.lastError = this.redact(message);
       return false;
     }
+  }
+
+  /** Next caption sequence number. */
+  getSequence(): number {
+    const seq = (this.sender as unknown as { getSequence?: () => number }).getSequence?.();
+    return typeof seq === "number" ? seq : 0;
   }
 
   recordDropped(): void {

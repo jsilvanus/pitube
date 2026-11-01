@@ -15,6 +15,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "pitube": "tsx src/cli.ts",
+    "openapi": "node scripts/build-openapi.mjs",
     "test": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {

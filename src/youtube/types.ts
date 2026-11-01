@@ -70,7 +70,7 @@ export interface LiveStreamResource {
   snippet?: {
     title: string;
   };
-  cdn?: LiveStreamCdn;
+  cdn?: LiveStreamCdn & { resolution?: string; frameRate?: string };
   status?: LiveStreamStatus;
 }
 

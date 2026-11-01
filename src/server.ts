@@ -10,6 +10,9 @@ import { CaptionPipeline } from "./captions/pipeline.js";
 import { GatewaySSEClient } from "./gateway/client.js";
 import { GatewayStatusReporter } from "./gateway/reporter.js";
 import { LifecycleCoordinator } from "./lifecycle/coordinator.js";
+import { EventBus } from "./events.js";
+import { StateStore } from "./state.js";
+import { EncoderClient } from "./encoder/client.js";
 import { registerRoutes } from "./routes.js";
 import { registerYouTubeOAuthRoutes } from "./youtube/oauth.js";
 
@@ -41,6 +44,11 @@ export function buildApp(config: PitubeConfig): PitubeApp {
     ytClient = new YouTubeClient({ auth: ytAuth });
   }
 
+  const events = new EventBus();
+  if (ytAuth) {
+    ytAuth.onHealthChange = (health) => events.publish("auth.health", { ...health });
+  }
+
   // 2. Caption Pipeline
   const captionPipeline = new CaptionPipeline({
     youtubeDelayMs: config.youtubeDelayMs,
@@ -53,6 +61,20 @@ export function buildApp(config: PitubeConfig): PitubeApp {
     captionPipeline,
     captionBaseUrl: config.captionBaseUrl,
     fallbackStreamKey: config.youtubeStreamKey,
+    streamId: config.streamId,
+    events,
+    requireStopConfirm: config.requireStopConfirm,
+    stateStore: new StateStore(config.stateFile),
+    ...(config.encoderUrl
+      ? {
+          encoder: new EncoderClient({
+            baseUrl: config.encoderUrl,
+            token: config.encoderToken,
+            unit: config.encoderUnit,
+            channel: config.encoderChannel,
+          }),
+        }
+      : {}),
   });
 
   // 4. Gateway SSE Client
@@ -95,6 +117,8 @@ export function buildApp(config: PitubeConfig): PitubeApp {
     coordinator,
     gatewayClient,
     apiKey: config.apiKey,
+    events,
+    auth: ytAuth,
   });
   registerYouTubeOAuthRoutes(server, {
     clientId: config.youtubeClientId,
@@ -103,13 +127,25 @@ export function buildApp(config: PitubeConfig): PitubeApp {
     envFile: config.envFile,
   });
 
+  let authTimer: ReturnType<typeof setInterval> | null = null;
+
   const start = async () => {
+    await server.listen({ port: config.port, host: config.host });
     gatewayClient.start();
     statusReporter.start();
-    await server.listen({ port: config.port, host: config.host });
+    if (ytAuth && config.authCheckIntervalMs > 0) {
+      void ytAuth.check();
+      authTimer = setInterval(() => void ytAuth.check(), config.authCheckIntervalMs);
+      authTimer.unref?.();
+    }
+    // Pick up a broadcast that is still live after a restart. Failure must not stop the service.
+    coordinator.recover().catch((err: unknown) => {
+      console.error("[pitube] Recovery failed:", err instanceof Error ? err.message : String(err));
+    });
   };
 
   const stop = async () => {
+    if (authTimer) clearInterval(authTimer);
     statusReporter.stop();
     gatewayClient.stop();
     coordinator.stop();
