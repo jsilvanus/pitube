@@ -15,6 +15,12 @@ export interface PitubeConfig {
   youtubeRefreshToken: string | null;
   youtubeStreamKey: string | null;
 
+  /** Redirect URI registered in Google Cloud for the one-time OAuth consent (default http://localhost:<port>/oauth/callback). */
+  oauthRedirectUri: string;
+
+  /** Env file that receives YOUTUBE_REFRESH_TOKEN after consent (default ./.env). */
+  envFile: string;
+
   /** Delay in milliseconds to align caption timestamps with live video delay (default: 30000) */
   youtubeDelayMs: number;
 
@@ -61,6 +67,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PitubeConfig {
     youtubeClientSecret,
     youtubeRefreshToken,
     youtubeStreamKey,
+    oauthRedirectUri: env.PITUBE_OAUTH_REDIRECT_URI?.trim() || `http://localhost:${port}/oauth/callback`,
+    envFile: env.PITUBE_ENV_FILE?.trim() || ".env",
     youtubeDelayMs: Number.isFinite(youtubeDelayMs) && youtubeDelayMs >= 0 ? youtubeDelayMs : 30000,
     staleCaptionMs: Number.isFinite(staleCaptionMs) && staleCaptionMs > 0 ? staleCaptionMs : 90000,
     captionBaseUrl,

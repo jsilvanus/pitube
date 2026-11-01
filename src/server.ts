@@ -11,6 +11,7 @@ import { GatewaySSEClient } from "./gateway/client.js";
 import { GatewayStatusReporter } from "./gateway/reporter.js";
 import { LifecycleCoordinator } from "./lifecycle/coordinator.js";
 import { registerRoutes } from "./routes.js";
+import { registerYouTubeOAuthRoutes } from "./youtube/oauth.js";
 
 export interface PitubeApp {
   server: FastifyInstance;
@@ -94,6 +95,12 @@ export function buildApp(config: PitubeConfig): PitubeApp {
     coordinator,
     gatewayClient,
     apiKey: config.apiKey,
+  });
+  registerYouTubeOAuthRoutes(server, {
+    clientId: config.youtubeClientId,
+    clientSecret: config.youtubeClientSecret,
+    redirectUri: config.oauthRedirectUri,
+    envFile: config.envFile,
   });
 
   const start = async () => {

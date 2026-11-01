@@ -45,6 +45,8 @@ Set via environment variables or a `.env` file (see `.env.example`):
 | `YOUTUBE_CLIENT_ID` | Google OAuth2 Client ID | *(required for live API)* |
 | `YOUTUBE_CLIENT_SECRET`| Google OAuth2 Client Secret | *(required for live API)* |
 | `YOUTUBE_REFRESH_TOKEN`| Persistent Google OAuth2 Refresh Token | *(required for live API)* |
+| `PITUBE_OAUTH_REDIRECT_URI` | Redirect URI registered in Google Cloud for the one-time consent | `http://localhost:<PITUBE_PORT>/oauth/callback` |
+| `PITUBE_ENV_FILE` | Env file that receives `YOUTUBE_REFRESH_TOKEN` after consent | `.env` |
 | `YOUTUBE_STREAM_KEY` | Optional fallback stream key | *(none)* |
 | `PITUBE_DELAY_MS` | Video delay compensation for captions | `30000` (30 s, YouTube guidance) |
 | `PITUBE_STALE_CAPTION_MS`| Max age before dropping stale transcripts | `90000` (90 s) |
@@ -78,3 +80,14 @@ This project is an integral component of the [Pi Production Ecosystem](file:///d
 > [!IMPORTANT]
 > Any changes to this repository's architectural role, API routes, communication protocols, exposed ports, dependencies, or runtime status **must be documented in the central `piecosystem` coordination repository** (`docs/projects-catalog.md` and `docs/inter-service-matrix.md`).
 > Always verify cross-system health with `npm run status` in `D:\piecosystem`.
+
+## Getting the YouTube refresh token (one time)
+
+pitube can fetch `YOUTUBE_REFRESH_TOKEN` itself. It needs `YOUTUBE_CLIENT_ID` and `YOUTUBE_CLIENT_SECRET` and a running pitube. The consent routes answer only requests that arrive from localhost on the Pi, so use an ssh tunnel; nothing is exposed.
+
+1. In Google Cloud (APIs & Services > Credentials > your OAuth client, type "Web application") add the authorised redirect URI `http://localhost:3105/oauth/callback` (use the port you run pitube on). Enable the YouTube Data API v3 and add yourself as a test user if the consent screen is in testing mode.
+2. On your own computer: `ssh -L 3105:localhost:3105 pi@kirkonpi.local`
+3. In the browser on that computer open `http://localhost:3105/auth/youtube`, sign in with the YouTube account and approve. The scope is `https://www.googleapis.com/auth/youtube`; the request is `access_type=offline&prompt=consent`.
+4. The token is written to `PITUBE_ENV_FILE` (mode 600) as `YOUTUBE_REFRESH_TOKEN=...`. It is never logged or shown. Restart pitube to use it.
+
+`pitube auth youtube` (`npm run pitube -- auth youtube`) prints these steps and the URL for the current settings. No broadcast is created or started. Not verified against real Google.
