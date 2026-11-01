@@ -5,7 +5,7 @@
  *   pitube help                  list the commands
  *   pitube <operation> [path params] [--key value] [--json '{...}'] [--file image]
  * Operations are generated from openapi/openapi.json at run time (one command per operationId).
- * Env: PITUBE_URL (default http://127.0.0.1:<PITUBE_PORT or 3105>), PITUBE_API_KEY.
+ * Env: PITUBE_URL (default http://127.0.0.1:<PITUBE_PORT or 3500>), PITUBE_API_KEY.
  */
 
 import { readFileSync } from "node:fs";
@@ -83,7 +83,7 @@ export function buildRequest(op: Operation, args: string[], env: NodeJS.ProcessE
     headers["Content-Type"] = "application/json";
   }
 
-  const port = env.PITUBE_PORT || "3105";
+  const port = env.PITUBE_PORT || "3500";
   const base = (env.PITUBE_URL || `http://127.0.0.1:${port}`).replace(/\/$/, "");
   const qs = query.toString();
   return {

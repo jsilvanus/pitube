@@ -115,8 +115,8 @@ These routes are exposed by `pitube` (and reverse-proxied or routed by `pigatewa
 - [ ] Initialize `package.json` with ESM (`"type": "module"`), TypeScript, Node 24 target.
 - [ ] Add runtime dependencies: `@jsilvanus/lcyt`, `fastify` (or Node `http`).
 - [ ] Configure environment variables:
-  - `PITUBE_PORT` (default: 3105)
-  - `PITUBE_GATEWAY_URL` (e.g., `http://127.0.0.1:3100`)
+  - `PITUBE_PORT` (default: 3500)
+  - `PITUBE_GATEWAY_URL` (e.g., `http://127.0.0.1:3000`)
   - `PITUBE_GATEWAY_TOKEN`
   - `YOUTUBE_CLIENT_ID`
   - `YOUTUBE_CLIENT_SECRET`
