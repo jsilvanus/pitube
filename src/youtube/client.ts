@@ -106,8 +106,8 @@ export class YouTubeClient {
       },
       contentDetails: {
         enableClosedCaptions: true,
-        closedCaptionsType: "httpPost",
-        latencyPreference: "lowLatency",
+        closedCaptionsType: "closedCaptionsHttpPost",
+        latencyPreference: "low",
         enableEmbed: true,
         monitorStream: {
           enableMonitorStream: true,

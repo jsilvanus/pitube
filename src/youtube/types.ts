@@ -26,7 +26,7 @@ export interface LiveBroadcastContentDetails {
   boundStreamId?: string;
   enableClosedCaptions?: boolean;
   closedCaptionsType?: "closedCaptionsHttpPost" | "httpPost" | "closedCaptionsEmbedded";
-  latencyPreference?: "ultraLowLatency" | "lowLatency" | "normal";
+  latencyPreference?: "ultraLow" | "low" | "normal" | "ultraLowLatency" | "lowLatency";
   enableEmbed?: boolean;
   monitorStream?: {
     enableMonitorStream?: boolean;
