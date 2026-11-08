@@ -6,6 +6,8 @@ export type BroadcastPrivacy = "public" | "unlisted" | "private";
 
 export type BroadcastState = "ready" | "testing" | "live" | "complete" | "idle";
 
+export type CoordinatorMode = "off" | "on_staging" | "on_live" | "auto";
+
 export type StreamHealth = "good" | "ok" | "bad" | "noData" | "unknown";
 
 export interface BroadcastSummary {
@@ -78,6 +80,7 @@ export interface PitubeStatus {
   service: "pitube";
   state: BroadcastState;
   level: "idle" | "upcoming" | "testing" | "live" | "unhealthy" | "ended";
+  mode: CoordinatorMode;
   selectedBroadcast: BroadcastSummary | null;
   streamHealth: StreamHealth;
   captions: CaptionStats;

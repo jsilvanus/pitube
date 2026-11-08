@@ -11,6 +11,9 @@ const optionalBroadcastId = { name: "broadcastId", in: "query", schema: { type: 
 const ops = [
   ["get", "/health", "health", "Liveness", { open: true }],
   ["get", "/api/v1/status", "status", "State, level (idle|upcoming|testing|live|unhealthy|ended), selected broadcast, stream health, caption counters", {}],
+  ["get", "/api/v1/mode", "mode-get", "Current coordinator mode (off|on_staging|on_live|auto)", {}],
+  ["post", "/api/v1/mode", "mode-set", "Set coordinator mode (off|on_staging|on_live|auto)", {
+    body: body({ type: "object", required: ["mode"], properties: { mode: { enum: ["off", "on_staging", "on_live", "auto"] } } }) }],
   ["get", "/api/v1/events", "events", "Server-Sent Events: status, broadcast.status, broadcast.transition, stream.health, auth.health", { sse: true }],
   ["get", "/api/v1/auth/health", "auth-health", "Sign-in state without secrets (unchecked|ok|revoked|refresh_failed)", {}],
   ["post", "/api/v1/auth/check", "auth-check", "Refresh the token now and report health", {}],

@@ -87,6 +87,24 @@ export function registerRoutes(
     return coordinator.getStatus(gwStatus.connected, gwStatus.lastEventAt, gwStatus.epoch);
   });
 
+  // Coordinator mode (off | on_staging | on_live | auto)
+  app.get("/api/v1/mode", async () => {
+    return { mode: coordinator.getMode() };
+  });
+
+  app.post<{ Body: { mode?: string } }>("/api/v1/mode", async (request, reply) => {
+    const mode = request.body?.mode;
+    if (mode !== "off" && mode !== "on_staging" && mode !== "on_live" && mode !== "auto") {
+      return reply.code(400).send({ error: "mode must be off, on_staging, on_live or auto" });
+    }
+    try {
+      const res = await coordinator.setMode(mode);
+      return reply.code(200).send(res);
+    } catch (err: unknown) {
+      return reply.code(500).send({ error: errorMessage(err) });
+    }
+  });
+
   // List upcoming broadcasts
   app.get<{ Querystring: { status?: string } }>("/api/v1/broadcasts", async (request, reply) => {
     const status = request.query.status ?? "upcoming";

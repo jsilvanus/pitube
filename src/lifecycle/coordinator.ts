@@ -17,6 +17,7 @@ import type {
   BroadcastState,
   BroadcastSummary,
   CaptionStats,
+  CoordinatorMode,
   PitubeStatus,
   StreamHealth,
 } from "../types.js";
@@ -41,6 +42,8 @@ export interface LifecycleCoordinatorOptions {
   /** How long to wait for YouTube to report the testing state (default 90 s). */
   testingTimeoutMs?: number;
   pollMs?: number;
+  initialMode?: CoordinatorMode;
+  autoPollMs?: number;
 }
 
 export type StartTarget = "testing" | "live";
@@ -63,13 +66,17 @@ export class LifecycleCoordinator {
   private readonly requireStopConfirm: boolean;
   private readonly confirmTtlMs: number;
   private stopToken: { token: string; broadcastId: string; expiresAt: number } | null = null;
-  private lastSnapshot = { level: "idle" as StatusLevel, broadcastId: null as string | null, state: "idle" as string, health: "unknown" as string };
+  private lastSnapshot = { level: "idle" as StatusLevel, mode: "auto" as CoordinatorMode, broadcastId: null as string | null, state: "idle" as string, health: "unknown" as string };
 
   private state: BroadcastState = "idle";
   private selectedBroadcast: BroadcastSummary | null = null;
   private boundStreamKey: string | null = null;
   private streamHealth: StreamHealth = "unknown";
   private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private mode: CoordinatorMode = "auto";
+  private readonly autoPollMs: number;
+  private autoPollTimer: ReturnType<typeof setInterval> | null = null;
+  private isFollowerPolling = false;
 
   constructor(options: LifecycleCoordinatorOptions) {
     this.client = options.client;
@@ -86,6 +93,11 @@ export class LifecycleCoordinator {
     this.events = options.events;
     this.requireStopConfirm = options.requireStopConfirm ?? false;
     this.confirmTtlMs = options.confirmTtlMs ?? 60_000;
+    this.mode = options.initialMode ?? "auto";
+    this.autoPollMs = options.autoPollMs ?? 15_000;
+    if (this.mode === "auto") {
+      this.startAutoPolling();
+    }
   }
 
   /** idle | upcoming | testing | live | unhealthy | ended, for the status endpoint and events. */
@@ -104,6 +116,7 @@ export class LifecycleCoordinator {
     if (!this.events) return;
     const next = {
       level: this.getLevel(),
+      mode: this.mode,
       broadcastId: this.selectedBroadcast?.id ?? null,
       state: this.state as string,
       health: this.streamHealth as string,
@@ -115,10 +128,196 @@ export class LifecycleCoordinator {
     }
     if (next.health !== prev.health) this.events.publish("stream.health", { health: next.health });
     if (next.level !== prev.level) this.events.publish("status", { level: next.level, live: next.state === "live" });
+    if (next.mode !== prev.mode) this.events.publish("mode", { mode: next.mode });
   }
 
   getState(): BroadcastState {
     return this.state;
+  }
+
+  getMode(): CoordinatorMode {
+    return this.mode;
+  }
+
+  async setMode(nextMode: CoordinatorMode): Promise<{ mode: CoordinatorMode; state: BroadcastState }> {
+    if (nextMode === "off") {
+      this.stopAutoPolling();
+      this.mode = "off";
+      if (this.selectedBroadcast && (this.state === "live" || this.state === "testing")) {
+        try {
+          const confirmToken = this.requireStopConfirm ? this.stopRequest().confirmToken : undefined;
+          await this.stopBroadcast(confirmToken);
+        } catch {
+          this.captionPipeline.stop();
+          this.stopHealthPolling();
+          this.state = "idle";
+          this.selectedBroadcast = null;
+        }
+      } else {
+        this.captionPipeline.stop();
+        this.stopHealthPolling();
+        this.state = "idle";
+        this.selectedBroadcast = null;
+      }
+      this.emitChanges();
+      return { mode: this.mode, state: this.state };
+    }
+
+    if (nextMode === "on_staging") {
+      this.stopAutoPolling();
+      this.mode = "on_staging";
+      if (!this.selectedBroadcast) {
+        try {
+          await this.selectBroadcast("auto");
+        } catch {
+          // If auto broadcast not found, keep whatever state
+        }
+      }
+      if (this.selectedBroadcast && this.state !== "testing") {
+        if (this.state === "ready") {
+          await this.startBroadcast("testing");
+        } else if (this.state === "live") {
+          this.captionPipeline.stop();
+        }
+      } else {
+        this.captionPipeline.stop();
+      }
+      this.emitChanges();
+      return { mode: this.mode, state: this.state };
+    }
+
+    if (nextMode === "on_live") {
+      this.stopAutoPolling();
+      this.mode = "on_live";
+      if (!this.selectedBroadcast) {
+        try {
+          await this.selectBroadcast("auto");
+        } catch {
+          // If auto broadcast not found, keep whatever state
+        }
+      }
+      if (this.selectedBroadcast && this.state !== "live") {
+        await this.startBroadcast("live");
+      } else if (this.selectedBroadcast && this.state === "live") {
+        if (this.boundStreamKey) {
+          this.setupCaptionSender(this.boundStreamKey);
+        }
+      }
+      this.emitChanges();
+      return { mode: this.mode, state: this.state };
+    }
+
+    if (nextMode === "auto") {
+      this.mode = "auto";
+      this.startAutoPolling();
+      await this.pollFollower();
+      this.emitChanges();
+      return { mode: this.mode, state: this.state };
+    }
+
+    throw new Error(`Invalid mode: ${String(nextMode)}`);
+  }
+
+  startAutoPolling(): void {
+    this.stopAutoPolling();
+    const poll = async () => {
+      try {
+        await this.pollFollower();
+      } catch {
+        // ignore background poll errors
+      }
+    };
+    this.autoPollTimer = setInterval(poll, this.autoPollMs);
+    this.autoPollTimer.unref?.();
+  }
+
+  stopAutoPolling(): void {
+    if (this.autoPollTimer) {
+      clearInterval(this.autoPollTimer);
+      this.autoPollTimer = null;
+    }
+  }
+
+  async pollFollower(): Promise<void> {
+    if (this.mode !== "auto" || !this.client || this.isFollowerPolling) return;
+    this.isFollowerPolling = true;
+    try {
+      if (this.state === "live" || this.state === "testing") {
+        if (!this.selectedBroadcast) return;
+        const current = await this.client.getBroadcast(this.selectedBroadcast.id);
+        if (!current) return;
+
+        if (current.status === "complete") {
+          this.captionPipeline.stop();
+          this.stopHealthPolling();
+          this.stateStore?.clear();
+          const ended = this.selectedBroadcast;
+          this.selectedBroadcast = null;
+          this.boundStreamKey = null;
+          this.ingestAddress = null;
+          this.state = "idle";
+          this.events?.publish("broadcast.transition", { id: ended.id, to: "complete" });
+          this.emitChanges();
+        } else if (current.status === "live" && this.state === "testing") {
+          this.state = "live";
+          this.selectedBroadcast.status = "live";
+          if (this.boundStreamKey) {
+            this.setupCaptionSender(this.boundStreamKey);
+          }
+          this.events?.publish("broadcast.transition", { id: this.selectedBroadcast.id, to: "live" });
+          this.emitChanges();
+        } else if (current.status !== this.state) {
+          this.state = current.status;
+          this.selectedBroadcast.status = current.status;
+          this.emitChanges();
+        }
+      } else {
+        if (this.selectedBroadcast) {
+          const current = await this.client.getBroadcast(this.selectedBroadcast.id);
+          if (current) {
+            if (current.status === "live") {
+              this.state = "live";
+              this.selectedBroadcast.status = "live";
+              if (this.boundStreamKey) {
+                this.setupCaptionSender(this.boundStreamKey);
+              }
+              this.startHealthPolling();
+              this.events?.publish("broadcast.transition", { id: this.selectedBroadcast.id, to: "live" });
+              this.emitChanges();
+              return;
+            } else if (current.status === "testing") {
+              this.state = "testing";
+              this.selectedBroadcast.status = "testing";
+              this.captionPipeline.stop();
+              this.startHealthPolling();
+              this.events?.publish("broadcast.transition", { id: this.selectedBroadcast.id, to: "testing" });
+              this.emitChanges();
+              return;
+            }
+          }
+        }
+
+        const activeList = await this.client.listBroadcasts("active");
+        const target = activeList.find((b) => b.status === "live") ?? activeList.find((b) => b.status === "testing");
+        if (target) {
+          this.adopt(target);
+          await this.resolveStreamKey(target);
+          this.state = target.status;
+          if (target.status === "live") {
+            if (this.boundStreamKey) {
+              this.setupCaptionSender(this.boundStreamKey);
+            }
+          } else {
+            this.captionPipeline.stop();
+          }
+          this.startHealthPolling();
+          this.events?.publish("broadcast.transition", { id: target.id, to: target.status });
+          this.emitChanges();
+        }
+      }
+    } finally {
+      this.isFollowerPolling = false;
+    }
   }
 
   getSelectedBroadcast(): BroadcastSummary | null {
@@ -617,6 +816,7 @@ export class LifecycleCoordinator {
       service: "pitube",
       state: this.state,
       level: this.getLevel(),
+      mode: this.mode,
       selectedBroadcast: this.selectedBroadcast,
       streamHealth: this.streamHealth,
       captions: this.captionPipeline.getStats(),
@@ -629,6 +829,7 @@ export class LifecycleCoordinator {
   }
 
   stop(): void {
+    this.stopAutoPolling();
     this.stopHealthPolling();
     this.captionPipeline.stop();
   }

@@ -500,4 +500,117 @@ describe("LifecycleCoordinator", () => {
     assert.equal(coordinator.getSelectedBroadcast()?.title, "Uusi otsikko");
     coordinator.stop();
   });
+
+  describe("Coordinator Modes: OFF, ON_STAGING, ON_LIVE, AUTO", () => {
+    it("mode defaults to auto and can be read via getMode()", () => {
+      const coordinator = new LifecycleCoordinator({
+        captionPipeline: new CaptionPipeline(),
+      });
+      assert.equal(coordinator.getMode(), "auto");
+      coordinator.stop();
+    });
+
+    it("setMode to off stops broadcast and captions", async () => {
+      const yt = fakeYouTube();
+      const coordinator = new LifecycleCoordinator({
+        client: new YouTubeClient({ fetchFn: yt.fetchFn }),
+        captionPipeline: new CaptionPipeline(),
+        sleep: noSleep,
+      });
+      await coordinator.selectBroadcast("bc_1");
+      await coordinator.startBroadcast("live");
+      assert.equal(coordinator.getState(), "live");
+      assert.equal(coordinator.getCaptionsStats().sent, 0);
+
+      const res = await coordinator.setMode("off");
+      assert.equal(res.mode, "off");
+      assert.equal(coordinator.getState(), "idle");
+      assert.equal(coordinator.getSelectedBroadcast(), null);
+      coordinator.stop();
+    });
+
+    it("setMode to on_staging starts testing mode without sending captions", async () => {
+      const yt = fakeYouTube({ monitor: true });
+      const coordinator = new LifecycleCoordinator({
+        client: new YouTubeClient({ fetchFn: yt.fetchFn }),
+        captionPipeline: new CaptionPipeline(),
+        sleep: noSleep,
+      });
+      await coordinator.selectBroadcast("bc_1");
+      const res = await coordinator.setMode("on_staging");
+      assert.equal(res.mode, "on_staging");
+      assert.equal(coordinator.getState(), "testing");
+      coordinator.stop();
+    });
+
+    it("setMode to on_live starts broadcast to live and enables captions", async () => {
+      const yt = fakeYouTube({ monitor: true });
+      const coordinator = new LifecycleCoordinator({
+        client: new YouTubeClient({ fetchFn: yt.fetchFn }),
+        captionPipeline: new CaptionPipeline(),
+        sleep: noSleep,
+      });
+      await coordinator.selectBroadcast("bc_1");
+      const res = await coordinator.setMode("on_live");
+      assert.equal(res.mode, "on_live");
+      assert.equal(coordinator.getState(), "live");
+      coordinator.stop();
+    });
+
+    it("auto mode: pollFollower follows external actor going live and starts captions", async () => {
+      const yt = fakeYouTube();
+      const pipeline = new CaptionPipeline();
+      const coordinator = new LifecycleCoordinator({
+        client: new YouTubeClient({ fetchFn: yt.fetchFn }),
+        captionPipeline: pipeline,
+        sleep: noSleep,
+      });
+
+      assert.equal(coordinator.getState(), "idle");
+      // External actor turns broadcast to live in YouTube Studio
+      yt.bc.status.lifeCycleStatus = "live";
+
+      await coordinator.pollFollower();
+
+      assert.equal(coordinator.getState(), "live");
+      assert.equal(coordinator.getSelectedBroadcast()?.id, "bc_1");
+      assert.ok(pipeline.running);
+
+      // External actor ends broadcast on YouTube
+      yt.bc.status.lifeCycleStatus = "complete";
+      await coordinator.pollFollower();
+
+      assert.equal(coordinator.getState(), "idle");
+      assert.equal(coordinator.getSelectedBroadcast(), null);
+      assert.equal(pipeline.running, false);
+
+      coordinator.stop();
+    });
+
+    it("auto mode: pollFollower follows external actor moving testing -> live", async () => {
+      const yt = fakeYouTube();
+      const pipeline = new CaptionPipeline();
+      const coordinator = new LifecycleCoordinator({
+        client: new YouTubeClient({ fetchFn: yt.fetchFn }),
+        captionPipeline: pipeline,
+        sleep: noSleep,
+      });
+
+      // External actor turns broadcast to testing
+      yt.bc.status.lifeCycleStatus = "testing";
+      await coordinator.pollFollower();
+
+      assert.equal(coordinator.getState(), "testing");
+      assert.equal(pipeline.running, false); // No captions in testing
+
+      // External actor turns broadcast live
+      yt.bc.status.lifeCycleStatus = "live";
+      await coordinator.pollFollower();
+
+      assert.equal(coordinator.getState(), "live");
+      assert.ok(pipeline.running); // Captions active now
+
+      coordinator.stop();
+    });
+  });
 });

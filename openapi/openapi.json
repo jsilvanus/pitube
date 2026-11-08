@@ -53,6 +53,55 @@
         }
       }
     },
+    "/api/v1/mode": {
+      "get": {
+        "operationId": "mode-get",
+        "summary": "Current coordinator mode (off|on_staging|on_live|auto)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error: string}"
+          }
+        }
+      },
+      "post": {
+        "operationId": "mode-set",
+        "summary": "Set coordinator mode (off|on_staging|on_live|auto)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "mode"
+                ],
+                "properties": {
+                  "mode": {
+                    "enum": [
+                      "off",
+                      "on_staging",
+                      "on_live",
+                      "auto"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error {error: string}"
+          }
+        }
+      }
+    },
     "/api/v1/events": {
       "get": {
         "operationId": "events",

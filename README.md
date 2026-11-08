@@ -62,7 +62,9 @@ Set via environment variables or a `.env` file (see `.env.example`):
 ## HTTP API
 
 - `GET /health` — Simple health check (`{ ok: true, service: "pitube" }`).
-- `GET /api/v1/status` — Current service state, selected broadcast, gateway connection, and caption delivery metrics.
+- `GET /api/v1/status` — Current service state, mode (`off|on_staging|on_live|auto`), selected broadcast, gateway connection, and caption delivery metrics.
+- `GET /api/v1/mode` — Current coordinator mode (`off|on_staging|on_live|auto`).
+- `POST /api/v1/mode` — Set coordinator mode (`{ "mode": "off" | "on_staging" | "on_live" | "auto" }`). `off` stops broadcast, `on_staging` enters testing mode (captions muted), `on_live` starts live stream and captions, `auto` follows external YouTube broadcast actions.
 - `GET /api/v1/broadcasts?status=upcoming|active|completed|all` — List broadcasts on the YouTube channel (default `upcoming`).
 - `POST /api/v1/broadcasts/select` — Select target broadcast (`{ "broadcastId": "<id>" | "auto" }`). `auto` only accepts a broadcast within 60 minutes of now. Stream health is polled from selection on.
 - `POST /api/v1/broadcasts/create` — Create a broadcast (`{ "title": "...", "privacy": "unlisted"(default)|"public"|"private", "autoSelect": true }`).

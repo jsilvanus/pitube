@@ -186,6 +186,23 @@ describe("HTTP Routes", () => {
       assert.equal(auth.state, "missing");
     });
 
+    it("GET /api/v1/mode returns current mode and POST /api/v1/mode validates and updates mode", async () => {
+      const app = buildApp(config);
+      const getRes = await app.server.inject({ method: "GET", url: "/api/v1/mode" });
+      assert.equal(getRes.statusCode, 200);
+      assert.deepEqual(JSON.parse(getRes.payload), { mode: "auto" });
+
+      const badRes = await app.server.inject({ method: "POST", url: "/api/v1/mode", headers, payload: { mode: "invalid" } });
+      assert.equal(badRes.statusCode, 400);
+
+      const postRes = await app.server.inject({ method: "POST", url: "/api/v1/mode", headers, payload: { mode: "off" } });
+      assert.equal(postRes.statusCode, 200);
+      assert.equal(JSON.parse(postRes.payload).mode, "off");
+
+      const statusRes = await app.server.inject({ method: "GET", url: "/api/v1/status" });
+      assert.equal(JSON.parse(statusRes.payload).mode, "off");
+    });
+
     it("stop/request without a selection is a 400", async () => {
       const app = buildApp(config);
       const res = await app.server.inject({ method: "POST", url: "/api/v1/broadcasts/stop/request", headers });

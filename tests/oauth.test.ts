@@ -32,7 +32,9 @@ describe("YouTube OAuth consent", () => {
     fs.writeFileSync(file, "A=1\nYOUTUBE_REFRESH_TOKEN=old\nB=2\n");
     saveRefreshToken(file, "new");
     assert.equal(fs.readFileSync(file, "utf8"), "A=1\nYOUTUBE_REFRESH_TOKEN=new\nB=2\n");
-    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    if (process.platform !== "win32") {
+      assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    }
     const fresh = tempEnv();
     saveRefreshToken(fresh, "t");
     assert.equal(fs.readFileSync(fresh, "utf8"), "YOUTUBE_REFRESH_TOKEN=t\n");
