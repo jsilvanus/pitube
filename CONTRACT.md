@@ -22,6 +22,7 @@ pivoice ──UDP telemetry──► pigateway ◄── transcripts (SSE pull o
 |---------------------|------------------|-----------------------------------------------------|
 | `ready`             | none             | `{ "status": "connected", "time": ISO }`            |
 | `transcript`        | `<epoch>:<seq>`  | a **transcript event**, defined below               |
+| `translation`       | `<epoch>:t<seq>` | a caption translation (PiVoice); **pitube ignores it** |
 | `pivoice`           | none             | capture telemetry (classification, meter, state)    |
 | `pivoice-activity`  | none             | session state: `closed/starting/open/stopping/error`|
 | `youtube`           | none             | pigateway's own YouTube state (separate concern)    |
@@ -31,6 +32,9 @@ reconnect.
 
 Query parameter `?types=transcript,pivoice-activity` limits the stream to the named event types.
 `ready` is always sent.
+A consumer that tracks `Last-Event-ID` and does not want `translation` events must pass `?types=` without it,
+otherwise its last seen id may be a `t<seq>` id. pitube does not process `translation` events and YouTube
+keeps the original caption track only.
 
 ### Reconnecting and replay
 
